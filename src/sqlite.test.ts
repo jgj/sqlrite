@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeAll } from "vitest";
-import {
-  isLibsqlClient,
-  isBetterSqlite3Database,
-  getLibsqlClient,
-  getBetterSqlite3Database,
-} from "./sqlite";
 import type { Client } from "@libsql/client";
 import type { Database } from "better-sqlite3";
+import { beforeAll, describe, expect, it } from "vitest";
+import {
+  getBetterSqlite3Database,
+  getLibsqlClient,
+  isBetterSqlite3Database,
+  isLibsqlClient,
+} from "./sqlite";
 
 describe("SQLite client detection", () => {
   let libsqlClient: Client;
