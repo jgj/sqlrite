@@ -5,8 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "check": "biome check",
-    "lint": "biome lint",
-    "lint:fix": "biome lint --write",
+    "check:fix": "biome check --fix --unsafe",
     "test": "vitest"
   },
   "dependencies": {
