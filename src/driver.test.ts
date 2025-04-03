@@ -1,0 +1,108 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { getDriver } from "./driver";
+import { type SQLite, getBetterSqlite3Database, getLibsqlClient } from "./sqlite";
+
+describe("Driver module", () => {
+  describe("getDriver function", () => {
+    it("should return libsql driver when given a libsql client", async () => {
+      const client = await getLibsqlClient();
+      const driver = getDriver(client);
+
+      expect(driver).toHaveProperty("execute");
+      expect(typeof driver.execute).toBe("function");
+    });
+
+    it("should return better-sqlite3 driver when given a better-sqlite3 database", async () => {
+      const db = await getBetterSqlite3Database();
+      const driver = getDriver(db);
+
+      expect(driver).toHaveProperty("execute");
+      expect(typeof driver.execute).toBe("function");
+    });
+
+    it("should throw TypeError for unsupported client", () => {
+      const fakeClient = {} as SQLite;
+
+      expect(() => getDriver(fakeClient)).toThrow(TypeError);
+      expect(() => getDriver(fakeClient)).toThrow("Unsupported client");
+    });
+  });
+
+  describe("libsql driver", () => {
+    let client: SQLite;
+    let driver: ReturnType<typeof getDriver>;
+
+    beforeEach(async () => {
+      client = await getLibsqlClient();
+      driver = getDriver(client);
+    });
+
+    it("should execute a simple query successfully", async () => {
+      const result = await driver.execute<{ value: number }>("SELECT 1 as value");
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(1);
+      expect(result[0]).toHaveProperty("value", 1);
+    });
+
+    it("should execute a query that returns multiple rows", async () => {
+      const result = await driver.execute<{ num: number }>(
+        "SELECT 1 as num UNION SELECT 2 UNION SELECT 3",
+      );
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(3);
+      expect(result.map((row) => row.num)).toEqual([1, 2, 3]);
+    });
+
+    it("should handle queries that return no rows", async () => {
+      const result = await driver.execute("SELECT 1 WHERE 1=0");
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(0);
+    });
+
+    it("should handle query execution errors", async () => {
+      await expect(driver.execute("INVALID SQL QUERY")).rejects.toThrow();
+    });
+  });
+
+  describe("better-sqlite3 driver", () => {
+    let db: SQLite;
+    let driver: ReturnType<typeof getDriver>;
+
+    beforeEach(async () => {
+      db = await getBetterSqlite3Database();
+      driver = getDriver(db);
+    });
+
+    it("should execute a simple query successfully", async () => {
+      const result = await driver.execute<{ value: number }>("SELECT 1 as value");
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(1);
+      expect(result[0]).toHaveProperty("value", 1);
+    });
+
+    it("should execute a query that returns multiple rows", async () => {
+      const result = await driver.execute<{ num: number }>(
+        "SELECT 1 as num UNION SELECT 2 UNION SELECT 3",
+      );
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(3);
+      expect(result.map((row) => row.num)).toEqual([1, 2, 3]);
+    });
+
+    it("should handle queries that return no rows", async () => {
+      const result = await driver.execute("SELECT 1 WHERE 1=0");
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(0);
+    });
+
+    it("should handle query execution errors", async () => {
+      await expect(driver.execute("INVALID SQL QUERY")).rejects.toThrow();
+    });
+  });
+});
