@@ -1,0 +1,24 @@
+#+TITLE: SQLRite TODO
+
+* Initial Implementation (@libsql/client)
+** TODO Core workflow
+*** TODO Create in-memory DB for target schema
+*** TODO Run schema introspection on both DBs
+*** TODO Compare schema results
+*** TODO Generate migration statements
+*** TODO Flag data loss risks
+*** TODO Execute statements (migrate function)
+
+* Future Work
+** TODO Driver abstraction layer
+** TODO better-sqlite3 support
+** TODO Additional database support
+
+* Testing (@libsql focus)
+** TODO Unit tests
+*** Test schema comparison scenarios
+*** Test statement generation
+*** Test data loss detection
+** TODO Integration tests with libsql
+*** Test full migration workflow
+*** Verify generated statements
