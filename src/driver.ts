@@ -3,25 +3,32 @@ import type { Database } from "better-sqlite3";
 import { type SQLite, isBetterSqlite3Database, isLibsqlClient } from "./sqlite";
 
 export interface Driver {
-  execute<T = unknown>(sql: string): Promise<T[]>;
+  execute(sql: string): Promise<void>;
+  query<T = unknown>(sql: string): Promise<T[]>;
 }
 
 type DriverFactory<C extends SQLite> = (client: C) => Driver;
 
 const getLibsqlDriver: DriverFactory<Client> = (client: Client) => {
-  const execute = async <T>(sql: string) => {
+  const query = async <T>(sql: string) => {
     const result = await client.execute(sql);
     return result.rows as T[];
   };
-  return { execute };
+  const execute = async (sql: string) => {
+    await query(sql);
+  };
+  return { execute, query };
 };
 
 const getBetterSqlite3Driver: DriverFactory<Database> = (client: Database) => {
-  const execute = async <T>(sql: string) => {
+  const query = async <T>(sql: string) => {
     const result = await client.prepare<unknown[], T>(sql).all();
     return result;
   };
-  return { execute };
+  const execute = async <T>(sql: string) => {
+    await client.prepare(sql).run();
+  };
+  return { execute, query };
 };
 
 export const getDriver: DriverFactory<SQLite> = (client: SQLite) => {

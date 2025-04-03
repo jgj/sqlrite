@@ -1,10 +1,12 @@
-import { createClient } from "@libsql/client";
-import Database from "better-sqlite3";
+import { parseIntrospectionResult } from "./introspection-result";
 
-export function getLibsqlClient() {
-  return createClient({ url: ":memory:" });
-}
-
-export function getBetterSqlite3Database() {
-  return new Database(":memory:");
+export function getEmptyDatabaseSchema() {
+  return parseIntrospectionResult({
+    tables: [],
+    columns: [],
+    indices: [],
+    foreign_keys: [],
+    primary_keys: [],
+    triggers: [],
+  });
 }

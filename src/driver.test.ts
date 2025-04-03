@@ -9,7 +9,9 @@ describe("Driver module", () => {
       const driver = getDriver(client);
 
       expect(driver).toHaveProperty("execute");
+      expect(driver).toHaveProperty("query");
       expect(typeof driver.execute).toBe("function");
+      expect(typeof driver.query).toBe("function");
     });
 
     it("should return better-sqlite3 driver when given a better-sqlite3 database", async () => {
@@ -17,7 +19,9 @@ describe("Driver module", () => {
       const driver = getDriver(db);
 
       expect(driver).toHaveProperty("execute");
+      expect(driver).toHaveProperty("query");
       expect(typeof driver.execute).toBe("function");
+      expect(typeof driver.query).toBe("function");
     });
 
     it("should throw TypeError for unsupported client", () => {
@@ -37,16 +41,16 @@ describe("Driver module", () => {
       driver = getDriver(client);
     });
 
-    it("should execute a simple query successfully", async () => {
-      const result = await driver.execute<{ value: number }>("SELECT 1 as value");
+    it("should query a simple select successfully", async () => {
+      const result = await driver.query<{ value: number }>("SELECT 1 as value");
 
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(1);
       expect(result[0]).toHaveProperty("value", 1);
     });
 
-    it("should execute a query that returns multiple rows", async () => {
-      const result = await driver.execute<{ num: number }>(
+    it("should query multiple rows", async () => {
+      const result = await driver.query<{ num: number }>(
         "SELECT 1 as num UNION SELECT 2 UNION SELECT 3",
       );
 
@@ -56,13 +60,19 @@ describe("Driver module", () => {
     });
 
     it("should handle queries that return no rows", async () => {
-      const result = await driver.execute("SELECT 1 WHERE 1=0");
+      const result = await driver.query("SELECT 1 WHERE 1=0");
 
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(0);
     });
 
-    it("should handle query execution errors", async () => {
+    it("should execute void operations", async () => {
+      await expect(
+        driver.execute("CREATE TABLE IF NOT EXISTS test (id INTEGER)"),
+      ).resolves.toBeUndefined();
+    });
+
+    it("should handle execution errors", async () => {
       await expect(driver.execute("INVALID SQL QUERY")).rejects.toThrow();
     });
   });
@@ -76,16 +86,16 @@ describe("Driver module", () => {
       driver = getDriver(db);
     });
 
-    it("should execute a simple query successfully", async () => {
-      const result = await driver.execute<{ value: number }>("SELECT 1 as value");
+    it("should query a simple select successfully", async () => {
+      const result = await driver.query<{ value: number }>("SELECT 1 as value");
 
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(1);
       expect(result[0]).toHaveProperty("value", 1);
     });
 
-    it("should execute a query that returns multiple rows", async () => {
-      const result = await driver.execute<{ num: number }>(
+    it("should query multiple rows", async () => {
+      const result = await driver.query<{ num: number }>(
         "SELECT 1 as num UNION SELECT 2 UNION SELECT 3",
       );
 
@@ -95,13 +105,19 @@ describe("Driver module", () => {
     });
 
     it("should handle queries that return no rows", async () => {
-      const result = await driver.execute("SELECT 1 WHERE 1=0");
+      const result = await driver.query("SELECT 1 WHERE 1=0");
 
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(0);
     });
 
-    it("should handle query execution errors", async () => {
+    it("should execute void operations", async () => {
+      await expect(
+        driver.execute("CREATE TABLE IF NOT EXISTS test (id INTEGER)"),
+      ).resolves.toBeUndefined();
+    });
+
+    it("should handle execution errors", async () => {
       await expect(driver.execute("INVALID SQL QUERY")).rejects.toThrow();
     });
   });
