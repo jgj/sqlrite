@@ -51,6 +51,7 @@ describe("introspect", () => {
           },
         ],
         execute: async () => {},
+        migrate: async () => true,
       };
 
       const result = await introspect(mockDriver as Driver);
@@ -80,6 +81,7 @@ describe("introspect", () => {
           },
         ],
         execute: async () => {},
+        migrate: async () => true,
       };
 
       const result = await introspect(mockDriver as Driver);
