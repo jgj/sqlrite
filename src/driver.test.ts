@@ -1,8 +1,28 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { getDriver } from "./driver";
+import { getDriver, getDriverType, getNextDriver } from "./driver";
 import { type SQLite, getBetterSqlite3Database, getLibsqlClient } from "./sqlite";
 
 describe("Driver module", () => {
+  describe("getDriverType function", () => {
+    it("should return 'libsql' for libsql client", async () => {
+      const client = await getLibsqlClient();
+      const type = getDriverType(client);
+      expect(type).toBe("libsql");
+    });
+
+    it("should return 'sqlite' for better-sqlite3 database", async () => {
+      const db = await getBetterSqlite3Database();
+      const type = getDriverType(db);
+      expect(type).toBe("sqlite");
+    });
+
+    it("should throw TypeError for unsupported client", () => {
+      const fakeClient = {} as SQLite;
+      expect(() => getDriverType(fakeClient)).toThrow(TypeError);
+      expect(() => getDriverType(fakeClient)).toThrow("Unsupported client");
+    });
+  });
+
   describe("getDriver function", () => {
     it("should return libsql driver when given a libsql client", async () => {
       const client = await getLibsqlClient();
@@ -119,6 +139,53 @@ describe("Driver module", () => {
 
     it("should handle execution errors", async () => {
       await expect(driver.execute("INVALID SQL QUERY")).rejects.toThrow();
+    });
+  });
+
+  describe("getNextDriver function", () => {
+    const testDDL = "CREATE TABLE IF NOT EXISTS test_next (id INTEGER PRIMARY KEY)";
+
+    it("should create new libsql driver with DDL when given libsql client", async () => {
+      const client = await getLibsqlClient();
+      const nextDriver = await getNextDriver(client, testDDL);
+
+      expect(nextDriver).toHaveProperty("execute");
+      expect(nextDriver).toHaveProperty("query");
+      expect(typeof nextDriver.execute).toBe("function");
+      expect(typeof nextDriver.query).toBe("function");
+
+      const result = await nextDriver.query<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='test_next'",
+      );
+      expect(result.length).toBe(1);
+      expect(result[0].name).toBe("test_next");
+    });
+
+    it("should create new better-sqlite3 driver with DDL when given better-sqlite3 database", async () => {
+      const db = await getBetterSqlite3Database();
+      const nextDriver = await getNextDriver(db, testDDL);
+
+      expect(nextDriver).toHaveProperty("execute");
+      expect(nextDriver).toHaveProperty("query");
+      expect(typeof nextDriver.execute).toBe("function");
+      expect(typeof nextDriver.query).toBe("function");
+
+      const result = await nextDriver.query<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='test_next'",
+      );
+      expect(result.length).toBe(1);
+      expect(result[0].name).toBe("test_next");
+    });
+
+    it("should throw TypeError for unsupported client", async () => {
+      const fakeClient = {} as SQLite;
+      await expect(getNextDriver(fakeClient, testDDL)).rejects.toThrow(TypeError);
+      await expect(getNextDriver(fakeClient, testDDL)).rejects.toThrow("Unsupported client");
+    });
+
+    it("should throw error when DDL is invalid", async () => {
+      const client = await getLibsqlClient();
+      await expect(getNextDriver(client, "INVALID SQL")).rejects.toThrow();
     });
   });
 });
