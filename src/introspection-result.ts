@@ -20,10 +20,7 @@ const table = type({
   sql: "string",
 });
 
-const columnPrecision = type({
-  precision: numberString,
-  scale: numberString,
-}).or(nullString);
+export type Table = typeof table.infer;
 
 const column = type({
   type: '"column"',
@@ -33,9 +30,14 @@ const column = type({
   ordinal_position: "number",
   nullable: boolString,
   character_maximum_length: numberString.or("null"),
-  precision: columnPrecision,
+  precision: type({
+    precision: numberString,
+    scale: numberString,
+  }).or(nullString),
   default: "string",
 });
+
+export type Column = typeof column.infer;
 
 const index = type({
   type: '"index"',
@@ -45,6 +47,8 @@ const index = type({
   unique: boolString,
   sql: "string|null",
 });
+
+export type Index = typeof index.infer;
 
 const foreign_key = type({
   type: '"foreign_key"',
@@ -58,6 +62,8 @@ const foreign_key = type({
   definition: "string",
 });
 
+export type ForeignKey = typeof foreign_key.infer;
+
 const primary_key = type({
   type: '"primary_key"',
   table: "string",
@@ -66,12 +72,16 @@ const primary_key = type({
   definition: "string",
 });
 
+export type PrimaryKey = typeof primary_key.infer;
+
 const trigger = type({
   type: '"trigger"',
   name: "string",
   table: "string",
   sql: "string",
 });
+
+export type Trigger = typeof trigger.infer;
 
 const schema = type({
   tables: table.array(),
@@ -83,6 +93,9 @@ const schema = type({
 });
 
 export type IntrospectionResult = typeof schema.infer;
+
+export type IntrospectionObject = Table | Column | Index | ForeignKey | PrimaryKey | Trigger;
+export type IntrospectionObjectType = IntrospectionObject["type"];
 
 export function parseIntrospectionResult(data: unknown) {
   if (typeof data === "string") {
