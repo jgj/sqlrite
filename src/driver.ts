@@ -23,7 +23,7 @@ const getLibsqlDriver: DriverFactory<Client> = (client: Client) => {
   };
 
   const execute = async (sql: string) => {
-    await query(sql);
+    await client.executeMultiple(sql);
   };
 
   const migrate = async (sql: string[]) => {

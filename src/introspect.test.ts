@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getDriver } from "./driver";
 import type { Driver } from "./driver";
 import { introspect } from "./introspect";
-import { splitStatements } from "./split-statements";
 import { type SQLite, getBetterSqlite3Database, getLibsqlClient } from "./sqlite";
 
 describe("introspect", () => {
@@ -106,10 +105,7 @@ describe("introspect", () => {
 
     // Helper function to execute multiple SQL statements
     async function executeStatements(sql: string): Promise<void> {
-      const { statements } = splitStatements(sql);
-      for (const statement of statements) {
-        await driver.execute(statement);
-      }
+      await driver.execute(sql);
     }
 
     beforeEach(async () => {
