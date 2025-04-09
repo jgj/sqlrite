@@ -83,6 +83,14 @@ const trigger = type({
 
 export type Trigger = typeof trigger.infer;
 
+const view = type({
+  type: '"view"',
+  name: "string",
+  sql: "string",
+});
+
+export type View = typeof view.infer;
+
 const schema = type({
   tables: table.array(),
   columns: column.array(),
@@ -90,11 +98,12 @@ const schema = type({
   foreign_keys: foreign_key.array(),
   primary_keys: primary_key.array(),
   triggers: trigger.array(),
+  views: view.array(),
 });
 
 export type IntrospectionResult = typeof schema.infer;
 
-export type IntrospectionObject = Table | Column | Index | ForeignKey | PrimaryKey | Trigger;
+export type IntrospectionObject = Table | Column | Index | ForeignKey | PrimaryKey | Trigger | View;
 export type IntrospectionObjectType = IntrospectionObject["type"];
 
 export function parseIntrospectionResult(data: unknown) {

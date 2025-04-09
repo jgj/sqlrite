@@ -75,6 +75,13 @@ describe("parseIntrospectionResult", () => {
         sql: "CREATE TRIGGER after_insert_user AFTER INSERT ON users BEGIN INSERT INTO logs VALUES(NEW.id, 'insert', datetime('now')); END;",
       },
     ],
+    views: [
+      {
+        type: "view",
+        name: "user_names",
+        sql: "CREATE VIEW user_names AS SELECT name FROM users",
+      },
+    ],
   };
 
   it("should parse valid JSON string input", () => {
