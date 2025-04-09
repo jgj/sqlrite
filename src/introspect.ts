@@ -1,5 +1,6 @@
 import type { Driver } from "./driver";
 import { parseIntrospectionResult } from "./introspection-result";
+import { findViewsDependingOnTable } from "./utils";
 
 const introspectionSql = /* sql */ `
 select
@@ -8,7 +9,7 @@ select
     (
       select
         json_group_array(
-          json_object('type', 'table', 'name', sch.name, 'sql', sch.sql)
+          json_object('type', 'table', 'name', sch.name, 'sql', sch.sql ,'views', json_array())
         )
       from
         sqlite_schema sch
@@ -202,7 +203,7 @@ select
     'views',
     (
       select
-        json_group_array(json_object('type', 'view', 'name', sch.name, 'sql', sch.sql))
+        json_group_array(json_object('type', 'view', 'name', sch.name, 'sql', sch.sql, 'tables', json_array()))
       from
         sqlite_schema sch
       where
@@ -212,5 +213,15 @@ select
 
 export async function introspect(driver: Driver) {
   const results = await driver.query<{ schema: string }>(introspectionSql);
-  return parseIntrospectionResult(results[0].schema);
+  const ir = parseIntrospectionResult(results[0].schema);
+
+  for (const table of ir.tables) {
+    table.views = findViewsDependingOnTable(table, ir.views);
+  }
+
+  for (const view of ir.views) {
+    view.tables = ir.tables.filter((t) => t.views.includes(view.name)).map((t) => t.name);
+  }
+
+  return ir;
 }

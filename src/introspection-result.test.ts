@@ -8,6 +8,7 @@ describe("parseIntrospectionResult", () => {
         type: "table",
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+        views: [],
       },
     ],
     columns: [
@@ -80,6 +81,7 @@ describe("parseIntrospectionResult", () => {
         type: "view",
         name: "user_names",
         sql: "CREATE VIEW user_names AS SELECT name FROM users",
+        tables: [],
       },
     ],
   };
