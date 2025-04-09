@@ -1,4 +1,14 @@
-import type { IntrospectionObject, IntrospectionObjectType } from "~/introspection-result";
+import type {
+  Column,
+  ForeignKey,
+  Index,
+  IntrospectionObject,
+  IntrospectionObjectType,
+  PrimaryKey,
+  Table,
+  Trigger,
+  View,
+} from "~/introspection-result";
 
 export type Modified<T extends IntrospectionObject> = {
   current: T;
@@ -13,4 +23,12 @@ export type Diff<T extends IntrospectionObject> = {
 };
 
 // biome-ignore lint/suspicious/noExplicitAny: no you're suspicious
-export type SchemaDiff = Record<IntrospectionObjectType, Diff<any>>;
+export interface SchemaDiff extends Record<IntrospectionObjectType, Diff<any>> {
+  table: Diff<Table>;
+  column: Diff<Column>;
+  index: Diff<Index>;
+  foreign_key: Diff<ForeignKey>;
+  primary_key: Diff<PrimaryKey>;
+  trigger: Diff<Trigger>;
+  view: Diff<View>;
+}

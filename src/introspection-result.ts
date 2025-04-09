@@ -18,6 +18,7 @@ const table = type({
   type: '"table"',
   name: "string",
   sql: "string",
+  views: "string[]",
 });
 
 export type Table = typeof table.infer;
@@ -87,6 +88,7 @@ const view = type({
   type: '"view"',
   name: "string",
   sql: "string",
+  tables: "string[]",
 });
 
 export type View = typeof view.infer;
