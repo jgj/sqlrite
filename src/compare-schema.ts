@@ -4,6 +4,7 @@ import { compareIndices } from "./compare/compare-indices";
 import { comparePrimaryKeys } from "./compare/compare-primary-keys";
 import { compareTables } from "./compare/compare-tables";
 import { compareTriggers } from "./compare/compare-triggers";
+import { compareViews } from "./compare/compare-views";
 import type { SchemaDiff } from "./compare/types";
 import type { IntrospectionResult } from "./introspection-result";
 
@@ -21,5 +22,6 @@ export function compareSchema(
   const foreign_key = compareForeignKeys(current.foreign_keys, desired.foreign_keys);
   const primary_key = comparePrimaryKeys(current.primary_keys, desired.primary_keys);
   const trigger = compareTriggers(current.triggers, desired.triggers);
-  return { table, column, index, foreign_key, primary_key, trigger };
+  const view = compareViews(current.views, desired.views);
+  return { table, column, index, foreign_key, primary_key, trigger, view };
 }

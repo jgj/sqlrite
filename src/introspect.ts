@@ -202,7 +202,7 @@ select
     'views',
     (
       select
-        json_group_array(json_object('type', 'view', 'name', sch.name))
+        json_group_array(json_object('type', 'view', 'name', sch.name, 'sql', sch.sql))
       from
         sqlite_schema sch
       where

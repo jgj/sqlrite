@@ -8,6 +8,7 @@ import { compareTables } from "./compare/compare-tables";
 import { compareTriggers } from "./compare/compare-triggers";
 import type { IntrospectionObjectType, IntrospectionResult } from "./introspection-result";
 import { cloneObject } from "./test-utils";
+import { compareViews } from "./compare/compare-views";
 
 vi.mock("./compare/compare-tables", () => ({
   compareTables: vi.fn().mockReturnValue({ added: [], removed: [], modified: [] }),
@@ -31,6 +32,10 @@ vi.mock("./compare/compare-primary-keys", () => ({
 
 vi.mock("./compare/compare-triggers", () => ({
   compareTriggers: vi.fn().mockReturnValue({ added: [], removed: [], modified: [] }),
+}));
+
+vi.mock("./compare/compare-views", () => ({
+  compareViews: vi.fn().mockReturnValue({ added: [], removed: [], modified: [] }),
 }));
 
 describe("compareSchema", () => {
@@ -70,6 +75,7 @@ describe("compareSchema", () => {
         { type: "primary_key", table: "test", column: "id", field_count: 1, definition: "" },
       ],
       triggers: [{ type: "trigger", name: "trg_test", table: "test", sql: "" }],
+      views: [{ type: "view", name: "trg_test", sql: "" }],
     };
 
     const desired = cloneObject(current);
@@ -82,6 +88,7 @@ describe("compareSchema", () => {
     expect(compareForeignKeys).toHaveBeenCalledWith(current.foreign_keys, desired.foreign_keys);
     expect(comparePrimaryKeys).toHaveBeenCalledWith(current.primary_keys, desired.primary_keys);
     expect(compareTriggers).toHaveBeenCalledWith(current.triggers, desired.triggers);
+    expect(compareViews).toHaveBeenCalledWith(current.views, desired.views);
   });
 
   it("returns a properly structured diff object", () => {
@@ -92,6 +99,7 @@ describe("compareSchema", () => {
       foreign_keys: [],
       primary_keys: [],
       triggers: [],
+      views: [],
     };
     const desired = cloneObject(current);
 
@@ -104,6 +112,7 @@ describe("compareSchema", () => {
       foreign_key: { added: [], removed: [], modified: [] },
       primary_key: { added: [], removed: [], modified: [] },
       trigger: { added: [], removed: [], modified: [] },
+      view: { added: [], removed: [], modified: [] },
     });
 
     for (const key of [
@@ -113,6 +122,7 @@ describe("compareSchema", () => {
       "foreign_key",
       "primary_key",
       "trigger",
+      "view",
     ] as IntrospectionObjectType[]) {
       expect(result[key]).toHaveProperty("added");
       expect(result[key]).toHaveProperty("removed");

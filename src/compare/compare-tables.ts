@@ -31,7 +31,5 @@ export function compareTables(current: Table[], desired: Table[]): Diff<Table> {
 }
 
 function hasTableLevelDifferences(current: string, desired: string): boolean {
-  if (current === desired) return false;
-  // TODO
-  return true;
+  return current !== desired;
 }
