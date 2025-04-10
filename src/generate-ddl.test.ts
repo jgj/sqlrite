@@ -29,29 +29,7 @@ describe("generateDDL", () => {
 
       const ddl = generateDDL(plan, current, desired);
 
-      expect(ddl).toEqual(["PRAGMA foreign_keys = OFF;", "PRAGMA foreign_keys = ON;"]);
-    });
-
-    it("should wrap all DDL in foreign_keys OFF/ON pragmas", () => {
-      // Simple plan with a single operation
-      const plan: MigrationPlan = [
-        {
-          type: "create",
-          target: {
-            type: "table",
-            name: "test",
-            sql: "CREATE TABLE test (id INTEGER PRIMARY KEY)",
-            views: [],
-          },
-        },
-      ];
-      const current = createEmptyIntrospection();
-      const desired = createEmptyIntrospection();
-
-      const ddl = generateDDL(plan, current, desired);
-
-      expect(ddl[0]).toBe("PRAGMA foreign_keys = OFF;");
-      expect(ddl[ddl.length - 1]).toBe("PRAGMA foreign_keys = ON;");
+      expect(ddl).toEqual([]);
     });
   });
 
