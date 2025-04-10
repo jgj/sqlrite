@@ -1,13 +1,13 @@
 import { glob } from "glob";
-import path from "node:path";
-import type { Driver } from "~/driver";
+import { resolve } from "node:path";
+import type { TestDriver } from "./test-driver";
 
 export interface TestCase {
   filename: string;
   description: string;
   current: string;
   next: string;
-  verify: (driver: Driver) => Promise<void>;
+  verify: (driver: TestDriver) => Promise<void>;
 }
 
 export async function loadTestCases(): Promise<TestCase[]> {
@@ -16,7 +16,7 @@ export async function loadTestCases(): Promise<TestCase[]> {
   const testCases: TestCase[] = [];
 
   for (const file of testFiles) {
-    const module = await import(path.resolve(file));
+    const module = await import(resolve(file));
 
     if (typeof module.description !== "string") {
       throw new Error(`Test case ${file} has a missing or invalid description`);
