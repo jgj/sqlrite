@@ -456,7 +456,9 @@ function getColumnDrops(
   return diff.column.removed
     .filter(
       (column) =>
-        !tablesToIgnore.has(column.table) && !renamedColumns.has(`${column.table}.${column.name}`),
+        !tablesToIgnore.has(column.table) &&
+        !renamedColumns.has(`${column.table}.${column.name}`) &&
+        !diff.table.removed.some((t) => t.name === column.table),
     )
     .map((column) => ({
       type: "drop",

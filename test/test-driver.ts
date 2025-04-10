@@ -20,6 +20,14 @@ export function getTestDriver(driver: Driver, context: TestDriverContext) {
         fmt(`Table '${name}' does not exist`),
       ).toBe(true);
     },
+    async tableNotExists(name: string) {
+      expect(
+        await exists(
+          `select 1 as success from sqlite_schema where type = 'table' and name = '${name}'`,
+        ),
+        fmt(`Table '${name}' still exists but should have been dropped`),
+      ).toBe(false);
+    },
     async tableHasColumn(table: string, column: string, dataType: string) {
       const result = await selectOne<{ type: string }>(
         `SELECT type FROM pragma_table_info('${table}') WHERE name = '${column}'`,
