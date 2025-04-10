@@ -141,3 +141,29 @@ function areValuesSimilar(a: unknown, b: unknown): boolean {
   // Otherwise compare directly
   return a === b;
 }
+
+type SuccessResult = {
+  success: true;
+  err: undefined;
+};
+
+type ErrorResult = {
+  success: false;
+  err: Error;
+};
+
+export type Result = SuccessResult | ErrorResult;
+
+class UnknownError extends Error {
+  constructor(readonly cause: unknown) {
+    super("An unknown error occurred");
+  }
+}
+
+export const result = (err?: unknown) => {
+  if (err === undefined) return { success: true } as Result;
+  if (err instanceof Error) {
+    return { success: false, err } as Result;
+  }
+  return { success: false, err: new UnknownError(err) } as Result;
+};

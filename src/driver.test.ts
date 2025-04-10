@@ -30,8 +30,10 @@ describe("Driver module", () => {
 
       expect(driver).toHaveProperty("execute");
       expect(driver).toHaveProperty("query");
+      expect(driver).toHaveProperty("migrate");
       expect(typeof driver.execute).toBe("function");
       expect(typeof driver.query).toBe("function");
+      expect(typeof driver.migrate).toBe("function");
     });
 
     it("should return better-sqlite3 driver when given a better-sqlite3 database", async () => {
@@ -40,8 +42,10 @@ describe("Driver module", () => {
 
       expect(driver).toHaveProperty("execute");
       expect(driver).toHaveProperty("query");
+      expect(driver).toHaveProperty("migrate");
       expect(typeof driver.execute).toBe("function");
       expect(typeof driver.query).toBe("function");
+      expect(typeof driver.migrate).toBe("function");
     });
 
     it("should throw TypeError for unsupported client", () => {
@@ -95,6 +99,36 @@ describe("Driver module", () => {
     it("should handle execution errors", async () => {
       await expect(driver.execute("INVALID SQL QUERY")).rejects.toThrow();
     });
+
+    it("should successfully migrate with valid SQL statements", async () => {
+      const migrations = [
+        "DROP TABLE IF EXISTS test_migrate",
+        "CREATE TABLE test_migrate (id INTEGER PRIMARY KEY, name TEXT)",
+        "INSERT INTO test_migrate (id, name) VALUES (1, 'test')",
+      ];
+
+      const migrateResult = await driver.migrate(migrations);
+
+      expect(migrateResult.success).toBe(true);
+      expect(migrateResult.err).toBeUndefined();
+
+      const result = await driver.query<{ id: number; name: string }>("SELECT * FROM test_migrate");
+
+      expect(result.length).toBe(1);
+      expect(result[0]).toEqual({ id: 1, name: "test" });
+    });
+
+    it("should return error result when migration fails", async () => {
+      const invalidMigrations = [
+        "DROP TABLE IF EXISTS test_migrate_fail",
+        "CREATE TABLE test_migrate_fail (id INTEGER PRIMARY KEY)",
+        "INVALID SQL STATEMENT",
+      ];
+      const migrateResult = await driver.migrate(invalidMigrations);
+
+      expect(migrateResult.success).toBe(false);
+      expect(migrateResult.err).toBeInstanceOf(Error);
+    });
   });
 
   describe("better-sqlite3 driver", () => {
@@ -118,7 +152,6 @@ describe("Driver module", () => {
       const result = await driver.query<{ num: number }>(
         "SELECT 1 as num UNION SELECT 2 UNION SELECT 3",
       );
-
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(3);
       expect(result.map((row) => row.num)).toEqual([1, 2, 3]);
@@ -139,6 +172,37 @@ describe("Driver module", () => {
 
     it("should handle execution errors", async () => {
       await expect(driver.execute("INVALID SQL QUERY")).rejects.toThrow();
+    });
+
+    it("should successfully migrate with valid SQL statements", async () => {
+      const migrations = [
+        "DROP TABLE IF EXISTS test_migrate",
+        "CREATE TABLE test_migrate (id INTEGER PRIMARY KEY, name TEXT)",
+        "INSERT INTO test_migrate (id, name) VALUES (1, 'test')",
+      ];
+
+      const migrateResult = await driver.migrate(migrations);
+
+      expect(migrateResult.success).toBe(true);
+      expect(migrateResult.err).toBeUndefined();
+
+      const result = await driver.query<{ id: number; name: string }>("SELECT * FROM test_migrate");
+
+      expect(result.length).toBe(1);
+      expect(result[0]).toEqual({ id: 1, name: "test" });
+    });
+
+    it("should return error result when migration fails", async () => {
+      const invalidMigrations = [
+        "DROP TABLE IF EXISTS test_migrate_fail",
+        "CREATE TABLE test_migrate_fail (id INTEGER PRIMARY KEY)",
+        "INVALID SQL STATEMENT",
+      ];
+
+      const migrateResult = await driver.migrate(invalidMigrations);
+
+      expect(migrateResult.success).toBe(false);
+      expect(migrateResult.err).toBeInstanceOf(Error);
     });
   });
 
