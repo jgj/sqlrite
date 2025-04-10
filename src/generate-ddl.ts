@@ -17,9 +17,6 @@ export function generateDDL(
 ): DDLStatement[] {
   const statements: DDLStatement[] = [];
 
-  // Add PRAGMA statement to disable foreign keys
-  statements.push("PRAGMA foreign_keys = OFF;");
-
   // Create column lookup tables for efficiency
   const currentColumnsByTable = groupColumnsByTable(curr.columns);
   const targetColumnsByTable = groupColumnsByTable(next.columns);
@@ -89,9 +86,6 @@ export function generateDDL(
       statements.push(`-- Error generating DDL: ${error}`);
     }
   }
-
-  // Add PRAGMA statement to enable foreign keys
-  statements.push("PRAGMA foreign_keys = ON;");
 
   return statements;
 }
