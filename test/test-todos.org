@@ -1,0 +1,68 @@
+#+TITLE: sqlrite integration testing TODO
+
+* Basic Schema Operations
+** DONE 0001_create_table | test basic CREATE TABLE migration
+** DONE 0002_drop_table | test basic DROP TABLE migration
+** TODO 0003_alter_table_add_column | test adding a new column
+** TODO 0004_alter_table_drop_column | test dropping a column
+** TODO 0011_rename_table | test renaming a table
+** TODO 0012_rename_column | test renaming a column
+
+* Index Operations
+** TODO 0005_create_index | test creating an index on a table
+** TODO 0006_drop_index | test dropping an index
+** TODO 0017_composite_index | test creating composite index
+
+* Constraint Operations
+** TODO 0007_add_foreign_key | test adding a foreign key constraint
+** TODO 0008_add_unique_constraint | test adding a unique constraint
+** TODO 0009_add_check_constraint | test adding a check constraint
+** TODO 0016_cascading_deletes | test foreign keys with cascade delete
+
+* Data Type and Affinity
+** TODO 0025_blob_type | test adding a column of type BLOB
+** TODO 0026_real_type | test adding a column of type REAL
+** TODO 0027_numeric_type | test adding a column of type NUMERIC
+** TODO 0028_text_affinity | test text affinity and implicit typing
+** TODO 0029_integer_affinity | test integer affinity and implicit typing
+** TODO 0010_alter_column_type | test modifying column data type (requires table recreation)
+
+* Table Properties
+** TODO 0013_multiple_tables | test creating multiple related tables
+** TODO 0014_composite_primary_key | test table with composite primary key
+** TODO 0015_default_values | test columns with default values
+** TODO 0030_no_pk_table_create | test creating a table with no primary key
+** TODO 0031_autoincrement | test adding autoincrement to a primary key column
+
+* Migration Mechanics
+** TODO 0019_transaction_rollback | test migration failure and rollback
+** TODO 0020_idempotent_migration | test idempotent migration operations
+** TODO 0024_column_order_change | test changing column order (requires table recreation)
+
+* Table Rewrite Operations
+** TODO 0021_table_rewrite_remove_not_null | test removing a NOT NULL constraint using table rewrite
+** TODO 0022_table_rewrite_change_default | test changing a column's default value using table rewrite
+** TODO 0023_table_rewrite_remove_foreign_key | test removing a foreign key constraint using table rewrite
+** TODO 0034_check_constraint_removal | test removing a check constraint
+
+* Views and Triggers
+** TODO 0035_create_trigger | test creating a trigger
+** TODO 0036_drop_trigger | test dropping a trigger
+** TODO 0037_create_view | test creating a view
+** TODO 0038_drop_view | test dropping a view
+** TODO 0039_view_dependency | test creating a view that depends on a table and ensure proper migration order
+
+* Alter Table Add Column
+** TODO 0042_alter_table_add_column_default_value | test adding a new column with a default value
+** TODO 0043_alter_table_add_column_nullable | test adding a new nullable column
+
+* Collations
+** TODO 0044_case_insensitive_collation | Test case-insensitive collation
+** TODO 0045_custom_collation | Test custom collation
+
+* Future Features (SQLite Specific)
+** TODO 0018_partial_index (FUTURE) | test creating partial/filtered index (SQLite specific WHERE clause)
+** TODO 0032_virtual_table_fts (FUTURE) | test creating a FTS virtual table (SQLite specific)
+** TODO 0033_virtual_table_other (FUTURE) | test creating other virtual tables (e.g., JSON1)
+** TODO 0040_full_text_search (FUTURE) | test basic full text search functionality after migration
+** TODO 0041_json_operations (FUTURE) | test basic JSON operations after enabling JSON1 extension (if needed)
