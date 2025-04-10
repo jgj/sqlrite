@@ -16,6 +16,7 @@
     "@libsql/client": "^0.15.2",
     "@types/better-sqlite3": "^7.6.12",
     "better-sqlite3": "^11.9.1",
+    "glob": "^11.0.1",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vite-tsconfig-paths": "^5.1.4",

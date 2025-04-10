@@ -7,11 +7,12 @@ import {
   isBetterSqlite3Database,
   isLibsqlClient,
 } from "./sqlite";
+import { result, type Result } from "./utils";
 
 export interface Driver {
   execute(sql: string): Promise<void>;
   query<T = unknown>(sql: string): Promise<T[]>;
-  migrate: (sql: string[]) => Promise<boolean>;
+  migrate: (sql: string[]) => Promise<Result>;
 }
 
 type DriverFactory<C extends SQLite> = (client: C) => Driver;
@@ -29,10 +30,10 @@ const getLibsqlDriver: DriverFactory<Client> = (client: Client) => {
   const migrate = async (sql: string[]) => {
     try {
       await client.migrate(sql);
-      return true;
+      return result();
     } catch (err) {
       console.error(err);
-      return false;
+      return result(err);
     }
   };
   return { execute, query, migrate };
@@ -57,10 +58,10 @@ const getBetterSqlite3Driver: DriverFactory<Database> = (client: Database) => {
           client.pragma("foreign_keys = on");
         })
         .deferred(sql);
-      return true;
+      return result();
     } catch (err) {
       console.error(err);
-      return false;
+      return result(err);
     }
   };
   return { execute, query, migrate };
