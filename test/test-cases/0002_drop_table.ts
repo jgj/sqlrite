@@ -14,7 +14,8 @@ export const current = `
 export const next = "";
 
 export async function verify(driver: TestDriver) {
-  // Let's verify that the table no longer exists
-  // We'll need to add a tableNotExists helper to TestDriver
+  driver.ddl.expectStatementCount(1);
+  driver.ddl.expectStatement("DROP TABLE users");
+
   await driver.tableNotExists("temp_users");
 }
