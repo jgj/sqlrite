@@ -4,7 +4,7 @@ import { getBetterSqlite3Database, getLibsqlClient } from "~/sqlite";
 import { getDriver, type Driver } from "~/driver";
 import type { SQLite } from "~/sqlite";
 import { loadTestCases, type TestCase } from "./load-test-cases";
-import { getTestDriver, type TestDriver } from "./test-driver";
+import { getTestDriver } from "./test-driver";
 
 describe("sqlrite integration tests", () => {
   describe.each([
@@ -38,8 +38,10 @@ describe("sqlrite integration tests", () => {
       });
 
       it("applies migration successfully", async () => {
-        await migrate(client, next);
-        await verify(getTestDriver(driver, { case: filename, client: clientName }));
+        const res = await migrate(client, next);
+        await verify(
+          getTestDriver(driver, { case: filename, client: clientName, statements: res.statements }),
+        );
       });
     });
   });

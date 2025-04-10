@@ -2,7 +2,7 @@ import { expect } from "vitest";
 import type { Driver } from "~/driver";
 
 export type TestDriver = ReturnType<typeof getTestDriver>;
-export type TestDriverContext = { case: string; client: string };
+export type TestDriverContext = { case: string; client: string; statements: string[] };
 
 export function getTestDriver(driver: Driver, context: TestDriverContext) {
   const selectOne = async <T>(sql: string) => (await driver.query<T>(sql)).at(0);
@@ -10,8 +10,21 @@ export function getTestDriver(driver: Driver, context: TestDriverContext) {
 
   const fmt = (msg: string) => `[${context.case}][${context.client}] ${msg}`;
 
+  const ddl = {
+    expectStatementCount(count: number) {
+      expect(context.statements.length, `Has ${count} DDL statements`).toBe(count);
+    },
+    expectStatement(startingWith: string) {
+      expect(
+        context.statements.some((s) => s.startsWith(startingWith)),
+        `Contains a statement starting with '${startingWith}'`,
+      );
+    },
+  } as const;
+
   return {
     ...driver,
+    ddl,
     async tableExists(name: string) {
       expect(
         await exists(

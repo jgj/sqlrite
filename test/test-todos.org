@@ -3,7 +3,7 @@
 * Basic Schema Operations
 ** DONE 0001_create_table | test basic CREATE TABLE migration
 ** DONE 0002_drop_table | test basic DROP TABLE migration
-** TODO 0003_alter_table_add_column | test adding a new column
+** DONE 0003_alter_table_add_column | test adding a new column
 ** TODO 0004_alter_table_drop_column | test dropping a column
 ** TODO 0011_rename_table | test renaming a table
 ** TODO 0012_rename_column | test renaming a column
