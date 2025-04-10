@@ -56,20 +56,23 @@ export function createMigrationPlan(diff: SchemaDiff): MigrationPlan {
   const viewCreates = getViewCreates(diff, ignore);
 
   return [
-    ...tableRecreates,
-    ...tableSchemaRewrites,
-    ...tableRenames,
-    ...tableCreates,
-    ...tableDrops,
-    ...columnRenames,
-    ...columnAdds,
-    ...columnDrops,
-    ...indexDrops,
-    ...indexCreates,
-    ...triggerDrops,
-    ...triggerCreates,
-    ...viewDrops,
-    ...viewCreates,
+    ...viewDrops, // Drop views first since they may depend on tables
+    ...triggerDrops, // Drop triggers before modifying tables they rely on
+    ...indexDrops, // Drop indexes before modifying their tables
+
+    ...tableRecreates, // Recreate tables (involves dropping and recreating)
+    ...tableSchemaRewrites, // Rewrite table schemas
+    ...tableRenames, // Rename tables
+    ...tableDrops, // Drop tables that aren't being recreated
+    ...tableCreates, // Create new tables
+
+    ...columnRenames, // Rename columns
+    ...columnDrops, // Drop columns
+    ...columnAdds, // Add columns
+
+    ...indexCreates, // Recreate indexes
+    ...triggerCreates, // Recreate triggers
+    ...viewCreates, // Recreate views
   ];
 }
 
