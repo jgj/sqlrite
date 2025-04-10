@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { migrate } from "~/migrate";
 import { getBetterSqlite3Database, getLibsqlClient } from "~/sqlite";
-import { getDriver } from "~/driver";
+import { getDriver, type Driver } from "~/driver";
 import type { SQLite } from "~/sqlite";
 import { loadTestCases, type TestCase } from "./load-test-cases";
 import { getTestDriver, type TestDriver } from "./test-driver";
 
-describe.skip("sqlrite integration tests", () => {
+describe("sqlrite integration tests", () => {
   describe.each([
     ["libsql", getLibsqlClient],
     ["better-sqlite3", getBetterSqlite3Database],
@@ -14,13 +14,13 @@ describe.skip("sqlrite integration tests", () => {
     const testCases: TestCase[] = await loadTestCases();
     console.log(`loaded ${testCases.length} test cases`);
 
-    describe.each(testCases)("$description", ({ current, next, verify }) => {
+    describe.each(testCases)("$description", ({ current, next, verify, filename }) => {
       let client: SQLite;
-      let driver: TestDriver;
+      let driver: Driver;
 
       beforeEach(async () => {
         client = await getClient();
-        driver = getTestDriver(getDriver(client));
+        driver = getDriver(client);
         await driver.execute(current);
       });
 
@@ -30,11 +30,16 @@ describe.skip("sqlrite integration tests", () => {
         }
       });
 
-      it("applies migration successfully", async () => {
+      it("applies migration without error", async () => {
         const res = await migrate(client, next);
-        expect(res.success).toBe(true);
+        expect(Array.isArray(res.statements)).toBe(true);
+        expect(res.success, `\n${res.statements.join("\n\t")}\n`).toBe(true);
         expect(res.err).toBeUndefined();
-        await verify(driver);
+      });
+
+      it("applies migration successfully", async () => {
+        await migrate(client, next);
+        await verify(getTestDriver(driver, { case: filename, client: clientName }));
       });
     });
   });

@@ -438,7 +438,9 @@ function getColumnAdds(
   return diff.column.added
     .filter(
       (column) =>
-        !tablesToIgnore.has(column.table) && !renamedColumns.has(`${column.table}.${column.name}`),
+        !tablesToIgnore.has(column.table) &&
+        !renamedColumns.has(`${column.table}.${column.name}`) &&
+        !diff.table.added.some((t) => t.name === column.table),
     )
     .map((column) => ({
       type: "create",

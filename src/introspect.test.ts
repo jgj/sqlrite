@@ -54,7 +54,7 @@ describe("introspect", () => {
         migrate: async () => true,
       };
 
-      const result = await introspect(mockDriver as Driver);
+      const result = await introspect(mockDriver as unknown as Driver);
 
       expect(result).toHaveProperty("tables");
       expect(result.tables).toHaveLength(1);
@@ -84,7 +84,7 @@ describe("introspect", () => {
         migrate: async () => true,
       };
 
-      const result = await introspect(mockDriver as Driver);
+      const result = await introspect(mockDriver as unknown as Driver);
 
       expect(result).toHaveProperty("tables");
       expect(result.tables).toHaveLength(0);

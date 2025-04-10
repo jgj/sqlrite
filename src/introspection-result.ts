@@ -5,9 +5,11 @@ const boolString = type("boolean|'true'|'false'").pipe((val) => {
   return val === "true";
 });
 
-const numberString = type("string|number").pipe((val) => {
+const numberString = type("string|number|null").pipe((val) => {
   if (typeof val === "number") return val;
-  return Number(val);
+  if (typeof val === "string" && /\d+/.test(val)) return Number(val);
+  if (val === "null" || val === null) return null;
+  throw new TypeError("Not a numeric string");
 });
 
 const nullString = type("'null'|null").pipe((val) => {
@@ -30,7 +32,7 @@ const column = type({
   data_type: "string",
   ordinal_position: "number",
   nullable: boolString,
-  character_maximum_length: numberString.or("null"),
+  character_maximum_length: numberString,
   precision: type({
     precision: numberString,
     scale: numberString,

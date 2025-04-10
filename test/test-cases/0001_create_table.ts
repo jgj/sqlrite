@@ -12,5 +12,8 @@ export const next = `
 `;
 
 export async function verify(driver: TestDriver) {
-  // TODO
+  await driver.tableExists("users");
+  await driver.tableHasColumn("users", "id", "INTEGER");
+  await driver.tableHasColumn("users", "name", "TEXT");
+  await driver.columnHasConstraint("users", "name", "notnull");
 }
