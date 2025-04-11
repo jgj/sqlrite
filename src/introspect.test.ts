@@ -431,7 +431,7 @@ describe("introspect", () => {
       // Verify all schema object types are correctly introspected
       expect(result.tables).toHaveLength(3);
       expect(result.columns.length).toBeGreaterThan(10); // All columns across tables
-      expect(result.indices).toHaveLength(2);
+      expect(result.indices).toHaveLength(4); // two explicit, two sqlite_autoindex_*
       expect(result.foreign_keys).toHaveLength(1);
       expect(result.primary_keys).toHaveLength(3); // One for each table
       expect(result.triggers).toHaveLength(1);

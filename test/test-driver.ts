@@ -5,6 +5,7 @@ export type TestDriver = ReturnType<typeof getTestDriver>;
 export type TestDriverContext = { case: string; client: string; statements: string[] };
 
 export function getTestDriver(driver: Driver, context: TestDriverContext) {
+  const select = async <T>(sql: string) => await driver.query<T>(sql);
   const selectOne = async <T>(sql: string) => (await driver.query<T>(sql)).at(0);
   const exists = async (sql: string) => (await driver.query(sql)).length > 0;
 
@@ -88,12 +89,12 @@ export function getTestDriver(driver: Driver, context: TestDriverContext) {
       ).toBe(false);
     },
     async indexHasColumns(table: string, indexName: string, expectedColumns: string[]) {
-      const result = await selectOne<{ sql: string }>(
-        `SELECT sql FROM sqlite_schema WHERE type = 'index' AND tbl_name = '${table}' AND name = '${indexName}'`,
+      const result = await select<{ name: string }>(
+        `select name from pragma_index_info('${indexName}') order by seqno`,
       );
 
-      const indexSql = result?.sql || "";
-      const columnsMatch = expectedColumns.every((column) => indexSql.includes(column));
+      const colNames = result.map((r) => r.name);
+      const columnsMatch = expectedColumns.every((column) => colNames.includes(column));
 
       expect(
         columnsMatch,

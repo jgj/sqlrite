@@ -117,7 +117,7 @@ select
         )
       )
       from sqlite_schema sch
-      join pragma_index_list(sch.name) idx on sch.type = 'table' and idx.name not like 'sqlite_autoindex%'
+      join pragma_index_list(sch.name) idx on sch.type = 'table'
       join sqlite_schema i on i.name = idx.name and i.type = 'index'
     ),
     'foreign_keys',
