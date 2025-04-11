@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { comparePrimaryKeys } from "./compare-primary-keys";
+import { describe, expect, it } from "vitest";
 import type { PrimaryKey } from "~/introspection-result";
+import { comparePrimaryKeys } from "./compare-primary-keys";
 
 const basePrimaryKey: PrimaryKey = {
   type: "primary_key",

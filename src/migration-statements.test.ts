@@ -1,10 +1,10 @@
-import { describe, expect, it, vi, beforeEach, type Mock } from "vitest";
-import { getMigrationStatements } from "./migration-statements";
+import { type Mock, beforeEach, describe, expect, it, vi } from "vitest";
 import { compareSchema } from "./compare-schema";
 import { getDriver, getNextDriver } from "./driver";
 import { generateDDL } from "./generate-ddl";
 import { introspect } from "./introspect";
 import { createMigrationPlan } from "./migration-plan";
+import { getMigrationStatements } from "./migration-statements";
 import type { SQLite } from "./sqlite";
 
 vi.mock("./compare-schema", () => ({

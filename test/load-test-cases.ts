@@ -1,5 +1,5 @@
-import { glob } from "glob";
 import { basename, resolve } from "node:path";
+import { glob } from "glob";
 import type { TestDriver } from "./test-driver";
 
 export interface TestCase {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Table, View } from "./introspection-result";
 import { findViewsDependingOnTable, toMap, toMapBy, toMapByName } from "./utils";
 

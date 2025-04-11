@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { generateDDL } from "./generate-ddl";
-import type { MigrationPlan } from "./migration-plan";
 import type { IntrospectionResult } from "./introspection-result";
-import type { Column, Table, Index, Trigger, View } from "./introspection-result";
+import type { Column, Index, Table, Trigger, View } from "./introspection-result";
+import type { MigrationPlan } from "./migration-plan";
 
 describe("generateDDL", () => {
   // Helper to create a minimal introspection result object

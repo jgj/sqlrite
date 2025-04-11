@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { createMigrationPlan } from "./migration-plan";
+import { describe, expect, it } from "vitest";
 import type { SchemaDiff } from "./compare/types";
-import { get } from "./test-utils";
 import type { Column } from "./introspection-result";
+import { createMigrationPlan } from "./migration-plan";
+import { get } from "./test-utils";
 
 // Helper function to create minimal schema diff
 function createEmptySchemaDiff(): SchemaDiff {
