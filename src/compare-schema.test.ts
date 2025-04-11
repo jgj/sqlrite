@@ -56,7 +56,14 @@ describe("compareSchema", () => {
         },
       ],
       indices: [
-        { type: "index", name: "idx_test", table: "test", column: "id", unique: false, sql: null },
+        {
+          type: "index",
+          name: "idx_test",
+          table: "test",
+          columns: ["id"],
+          unique: false,
+          sql: null,
+        },
       ],
       foreign_keys: [
         {

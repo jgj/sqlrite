@@ -97,34 +97,28 @@ select
     ),
     'indices',
     (
-      select
-        json_group_array(
-          json_object(
-            'type',
-            'index',
-            'name',
-            idx.name,
-            'table',
-            sch.name,
-            'column',
-            ic.name,
-            'unique',
-            (
-              case
-                when idx."unique" = 1 then 'true'
-                else 'false'
-              end
-            ),
-            'sql',
-            i.sql
-          )
+      select json_group_array(
+        json_object(
+          'type', 'index',
+          'name', idx.name,
+          'table', sch.name,
+          'columns', (
+            select json_group_array(ic.name)
+            from pragma_index_info(idx.name) ic
+            order by ic.seqno
+          ),
+          'unique', (
+            case
+              when idx."unique" = 1 then 'true'
+              else 'false'
+            end
+          ),
+          'sql', i.sql
         )
-      from
-        sqlite_schema sch
-        join pragma_index_list(sch.name) idx on sch.type = 'table' and idx.name not like 'sqlite_autoindex%'
-        join pragma_index_info(idx.name) ic
-        join sqlite_schema i on i.name = idx.name
-        and i.type = 'index'
+      )
+      from sqlite_schema sch
+      join pragma_index_list(sch.name) idx on sch.type = 'table' and idx.name not like 'sqlite_autoindex%'
+      join sqlite_schema i on i.name = idx.name and i.type = 'index'
     ),
     'foreign_keys',
     (

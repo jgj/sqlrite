@@ -47,7 +47,7 @@ const index = type({
   type: '"index"',
   name: "string",
   table: "string",
-  column: "string",
+  columns: "string[]",
   unique: boolString,
   sql: "string|null",
 });

@@ -79,6 +79,29 @@ export function getTestDriver(driver: Driver, context: TestDriverContext) {
         fmt(`Index '${indexName}' does not exist on table '${table}'`),
       ).toBe(true);
     },
+    async indexNotExists(table: string, indexName: string) {
+      expect(
+        await exists(
+          `SELECT 1 FROM sqlite_schema WHERE type = 'index' AND tbl_name = '${table}' AND name = '${indexName}'`,
+        ),
+        fmt(`Index '${indexName}' still exists on table '${table}' but should have been dropped`),
+      ).toBe(false);
+    },
+    async indexHasColumns(table: string, indexName: string, expectedColumns: string[]) {
+      const result = await selectOne<{ sql: string }>(
+        `SELECT sql FROM sqlite_schema WHERE type = 'index' AND tbl_name = '${table}' AND name = '${indexName}'`,
+      );
+
+      const indexSql = result?.sql || "";
+      const columnsMatch = expectedColumns.every((column) => indexSql.includes(column));
+
+      expect(
+        columnsMatch,
+        fmt(
+          `Index '${indexName}' on table '${table}' does not have the expected columns: ${expectedColumns.join(", ")}`,
+        ),
+      ).toBe(true);
+    },
     async foreignKeyExists(
       fromTable: string,
       fromColumn: string,

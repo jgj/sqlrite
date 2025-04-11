@@ -40,6 +40,7 @@ describe("generateDDL", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
         views: [],
+        num_cols: 2,
       };
 
       const plan: MigrationPlan = [
@@ -66,6 +67,7 @@ describe("generateDDL", () => {
         name: "old_table",
         sql: "CREATE TABLE old_table (id INTEGER PRIMARY KEY)",
         views: [],
+        num_cols: 1,
       };
 
       const plan: MigrationPlan = [
@@ -92,6 +94,7 @@ describe("generateDDL", () => {
         name: "old_name",
         sql: "CREATE TABLE old_name (id INTEGER PRIMARY KEY)",
         views: [],
+        num_cols: 1,
       };
 
       const targetTable: Table = {
@@ -99,6 +102,7 @@ describe("generateDDL", () => {
         name: "new_name",
         sql: "CREATE TABLE new_name (id INTEGER PRIMARY KEY)",
         views: [],
+        num_cols: 1,
       };
 
       const plan: MigrationPlan = [
@@ -307,7 +311,7 @@ describe("generateDDL", () => {
         type: "index",
         name: "idx_users_email",
         table: "users",
-        column: "email",
+        columns: ["email"],
         unique: false,
         sql: "CREATE INDEX idx_users_email ON users(email)",
       };
@@ -335,7 +339,7 @@ describe("generateDDL", () => {
         type: "index",
         name: "idx_users_email_unique",
         table: "users",
-        column: "email",
+        columns: ["email"],
         unique: true,
         sql: null,
       };
@@ -363,7 +367,7 @@ describe("generateDDL", () => {
         type: "index",
         name: "idx_users_name",
         table: "users",
-        column: "name",
+        columns: ["name"],
         unique: false,
         sql: "CREATE INDEX idx_users_name ON users(name)",
       };
@@ -507,6 +511,7 @@ describe("generateDDL", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)",
         views: [],
+        num_cols: 2,
       };
 
       const targetTable: Table = {
@@ -514,6 +519,7 @@ describe("generateDDL", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT UNIQUE)",
         views: [],
+        num_cols: 3,
       };
 
       const currentColumns: Column[] = [
@@ -595,6 +601,7 @@ describe("generateDDL", () => {
         name: "events",
         sql: "CREATE TABLE events (id INTEGER PRIMARY KEY, status TEXT DEFAULT 'pending' CHECK(status IN ('pending','done')))",
         views: [],
+        num_cols: 2,
       };
 
       const targetTable: Table = {
@@ -602,6 +609,7 @@ describe("generateDDL", () => {
         name: "events",
         sql: "CREATE TABLE events (id INTEGER PRIMARY KEY, status TEXT DEFAULT 'new')",
         views: [],
+        num_cols: 2,
       };
 
       const plan: MigrationPlan = [
@@ -654,12 +662,14 @@ describe("generateDDL", () => {
             name: "users",
             sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)",
             views: [],
+            num_cols: 2,
           },
           target: {
             type: "table",
             name: "users",
             sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT UNIQUE)",
             views: [],
+            num_cols: 3,
           },
         },
         {
@@ -680,6 +690,7 @@ describe("generateDDL", () => {
             name: "users",
             sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)",
             views: ["user_view"],
+            num_cols: 2,
           },
         ],
         columns: [
@@ -723,6 +734,7 @@ describe("generateDDL", () => {
             name: "users",
             sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT UNIQUE)",
             views: ["user_email_view"],
+            num_cols: 3,
           },
         ],
         columns: [
@@ -793,6 +805,7 @@ describe("generateDDL", () => {
         name: "user data",
         sql: 'CREATE TABLE "user data" (id INTEGER PRIMARY KEY, "full name" TEXT)',
         views: [],
+        num_cols: 2,
       };
 
       const plan: MigrationPlan = [
@@ -870,6 +883,7 @@ describe("generateDDL", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY)",
         views: [],
+        num_cols: 1,
       };
 
       // Define a recreate operation but with empty columns arrays

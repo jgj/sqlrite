@@ -7,6 +7,7 @@ describe("compareViews", () => {
     type: "view",
     name: "test_idx",
     sql: "CREATE VIEW test_view1 AS select name from test_table",
+    tables: ["test_table"],
   };
 
   it("should detect added views", () => {

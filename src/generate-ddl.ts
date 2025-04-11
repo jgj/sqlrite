@@ -7,7 +7,7 @@ import type {
   View,
   IntrospectionResult,
 } from "./introspection-result";
-import { sqlIdentifier } from "./utils";
+import { sqlIdentifier as sql } from "./utils";
 
 export type DDLStatement = string;
 
@@ -109,7 +109,7 @@ function ensureSemicolon(sql: string): string {
 
 // Generate DDL for dropping a view
 function generateDropViewDDL(view: View): DDLStatement {
-  return `DROP VIEW IF EXISTS ${sqlIdentifier(view.name)};`;
+  return `DROP VIEW IF EXISTS ${sql(view.name)};`;
 }
 
 // Generate DDL for creating a view
@@ -119,7 +119,7 @@ function generateCreateViewDDL(view: View): DDLStatement {
 
 // Generate DDL for dropping a trigger
 function generateDropTriggerDDL(trigger: Trigger): DDLStatement {
-  return `DROP TRIGGER IF EXISTS ${sqlIdentifier(trigger.name)};`;
+  return `DROP TRIGGER IF EXISTS ${sql(trigger.name)};`;
 }
 
 // Generate DDL for creating a trigger
@@ -129,7 +129,7 @@ function generateCreateTriggerDDL(trigger: Trigger): DDLStatement {
 
 // Generate DDL for dropping an index
 function generateDropIndexDDL(index: Index): DDLStatement {
-  return `DROP INDEX IF EXISTS ${sqlIdentifier(index.name)};`;
+  return `DROP INDEX IF EXISTS ${sql(index.name)};`;
 }
 
 // Generate DDL for creating an index
@@ -142,13 +142,13 @@ function generateCreateIndexDDL(index: Index): DDLStatement {
 
 // Generate index SQL if not available in the index object
 function generateIndexSQL(index: Index): string {
-  const uniqueStr = index.unique ? "UNIQUE " : "";
-  return `CREATE ${uniqueStr}INDEX ${sqlIdentifier(index.name)} ON ${sqlIdentifier(index.table)} (${sqlIdentifier(index.column)});`;
+  const uniq = index.unique ? "UNIQUE " : "";
+  return `CREATE ${uniq}INDEX ${sql(index.name)} ON ${sql(index.table)} (${index.columns.map(sql).join(",")});`;
 }
 
 // Generate DDL for dropping a table
 function generateDropTableDDL(table: Table): DDLStatement {
-  return `DROP TABLE IF EXISTS ${sqlIdentifier(table.name)};`;
+  return `DROP TABLE IF EXISTS ${sql(table.name)};`;
 }
 
 // Generate DDL for creating a table
@@ -158,17 +158,17 @@ function generateCreateTableDDL(table: Table): DDLStatement {
 
 // Generate DDL for renaming a table
 function generateRenameTableDDL(currentTable: Table, targetTable: Table): DDLStatement {
-  return `ALTER TABLE ${sqlIdentifier(currentTable.name)} RENAME TO ${sqlIdentifier(targetTable.name)};`;
+  return `ALTER TABLE ${sql(currentTable.name)} RENAME TO ${sql(targetTable.name)};`;
 }
 
 // Generate DDL for adding a column
 function generateAddColumnDDL(column: Column): DDLStatement {
-  return `ALTER TABLE ${sqlIdentifier(column.table)} ADD COLUMN ${generateColumnDefinition(column)};`;
+  return `ALTER TABLE ${sql(column.table)} ADD COLUMN ${generateColumnDefinition(column)};`;
 }
 
 // Generate a column definition string
 function generateColumnDefinition(column: Column): string {
-  let definition = `${sqlIdentifier(column.name)} ${column.data_type.toUpperCase()}`;
+  let definition = `${sql(column.name)} ${column.data_type.toUpperCase()}`;
 
   // Add length constraint if specified
   if (column.character_maximum_length !== null) {
@@ -195,12 +195,12 @@ function generateColumnDefinition(column: Column): string {
 
 // Generate DDL for dropping a column
 function generateDropColumnDDL(column: Column): DDLStatement {
-  return `ALTER TABLE ${sqlIdentifier(column.table)} DROP COLUMN ${sqlIdentifier(column.name)};`;
+  return `ALTER TABLE ${sql(column.table)} DROP COLUMN ${sql(column.name)};`;
 }
 
 // Generate DDL for renaming a column
 function generateRenameColumnDDL(currentColumn: Column, targetColumn: Column): DDLStatement {
-  return `ALTER TABLE ${sqlIdentifier(currentColumn.table)} RENAME COLUMN ${sqlIdentifier(currentColumn.name)} TO ${sqlIdentifier(targetColumn.name)};`;
+  return `ALTER TABLE ${sql(currentColumn.table)} RENAME COLUMN ${sql(currentColumn.name)} TO ${sql(targetColumn.name)};`;
 }
 
 // Generate DDL for table recreation (complex schema changes)
@@ -217,7 +217,7 @@ function generateRecreateTableDDL(
   // Create temporary table with new schema
   const createTempTableSQL = targetTable.sql.replace(
     new RegExp(`"?${targetTable.name}"?`),
-    sqlIdentifier(tempTableName),
+    sql(tempTableName),
   );
   statements.push(ensureSemicolon(createTempTableSQL));
 
@@ -228,19 +228,17 @@ function generateRecreateTableDDL(
 
   // Copy data from old table to new table
   if (commonColumnNames.length > 0) {
-    const columnList = commonColumnNames.map((name) => sqlIdentifier(name)).join(", ");
+    const columnList = commonColumnNames.map((name) => sql(name)).join(", ");
     statements.push(
-      `INSERT INTO ${sqlIdentifier(tempTableName)} (${columnList}) SELECT ${columnList} FROM ${sqlIdentifier(currentTable.name)};`,
+      `INSERT INTO ${sql(tempTableName)} (${columnList}) SELECT ${columnList} FROM ${sql(currentTable.name)};`,
     );
   }
 
   // Drop old table
-  statements.push(`DROP TABLE ${sqlIdentifier(currentTable.name)};`);
+  statements.push(`DROP TABLE ${sql(currentTable.name)};`);
 
   // Rename temporary table to target name
-  statements.push(
-    `ALTER TABLE ${sqlIdentifier(tempTableName)} RENAME TO ${sqlIdentifier(targetTable.name)};`,
-  );
+  statements.push(`ALTER TABLE ${sql(tempTableName)} RENAME TO ${sql(targetTable.name)};`);
 
   return statements;
 }

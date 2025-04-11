@@ -243,13 +243,13 @@ describe("introspect", () => {
       const uniqueIndex = result.indices.find((i) => i.name === "idx_products_sku");
       expect(uniqueIndex).toBeDefined();
       expect(uniqueIndex?.table).toBe("products");
-      expect(uniqueIndex?.column).toBe("sku");
+      expect(uniqueIndex?.columns).toEqual(["sku"]);
       expect(uniqueIndex?.unique).toBe(true);
 
       const nonUniqueIndex = result.indices.find((i) => i.name === "idx_products_name");
       expect(nonUniqueIndex).toBeDefined();
       expect(nonUniqueIndex?.table).toBe("products");
-      expect(nonUniqueIndex?.column).toBe("name");
+      expect(nonUniqueIndex?.columns).toEqual(["name"]);
       expect(nonUniqueIndex?.unique).toBe(false);
     });
 

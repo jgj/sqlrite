@@ -5,6 +5,7 @@ import type { TestDriver } from "./test-driver";
 export interface TestCase {
   filename: string;
   description: string;
+  exclusive?: boolean;
   current: string;
   next: string;
   verify: (driver: TestDriver) => Promise<void>;
@@ -37,6 +38,7 @@ export async function loadTestCases(): Promise<TestCase[]> {
     testCases.push({
       filename: basename(file),
       description: module.description,
+      exclusive: module.exclusive,
       current: module.current,
       next: module.next,
       verify: module.verify,
