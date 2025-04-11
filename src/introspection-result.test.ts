@@ -41,7 +41,7 @@ describe("parseIntrospectionResult", () => {
         type: "index",
         name: "idx_users_name",
         table: "users",
-        column: "name",
+        columns: ["name"],
         unique: true,
         sql: "CREATE UNIQUE INDEX idx_users_name ON users(name)",
       },

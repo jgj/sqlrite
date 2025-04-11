@@ -58,6 +58,7 @@ describe("findViewsDependingOnTable", () => {
     name: "users",
     sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)",
     views: [],
+    num_cols: 3,
   };
 
   // Test cases with various SQL patterns
@@ -209,6 +210,7 @@ describe("findViewsDependingOnTable", () => {
       name: "user_stats",
       sql: "CREATE TABLE user_stats (user_id INTEGER, stat_name TEXT, value INTEGER)",
       views: [],
+      num_cols: 3,
     };
 
     const views: View[] = [
@@ -237,6 +239,7 @@ describe("findViewsDependingOnTable", () => {
       name: "user-data",
       sql: "CREATE TABLE [user-data] (id INTEGER, value TEXT)",
       views: [],
+      num_cols: 2,
     };
 
     const views: View[] = [

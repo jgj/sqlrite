@@ -1,1 +1,2 @@
-export { migrate, getMigrationPlan } from "./migrate";
+export { migrate } from "./migrate";
+export { getMigrationStatements as getMigration } from "./migration-statements";

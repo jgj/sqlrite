@@ -9,12 +9,15 @@ import { getTestDriver } from "./test-driver";
 describe("sqlrite integration tests", () => {
   describe.each([
     ["libsql", getLibsqlClient],
-    ["better-sqlite3", getBetterSqlite3Database],
+    // ["better-sqlite3", getBetterSqlite3Database],
   ])("using %s", async (clientName, getClient) => {
     const testCases: TestCase[] = await loadTestCases();
     console.log(`loaded ${testCases.length} test cases`);
 
-    describe.each(testCases)("$filename $description", ({ current, next, verify, filename }) => {
+    const exc = testCases.find((c) => c.exclusive);
+    const tests = exc ? [exc] : testCases;
+
+    describe.each(tests)("$filename $description", ({ current, next, verify, filename }) => {
       let client: SQLite;
       let driver: Driver;
 

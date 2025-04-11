@@ -7,7 +7,7 @@ describe("compareIndices", () => {
     type: "index",
     name: "test_idx",
     table: "users",
-    column: "email",
+    columns: ["email"],
     unique: false,
     sql: null,
   };
@@ -57,10 +57,13 @@ describe("compareIndices", () => {
   });
 
   it("should handle multiple changes simultaneously", () => {
-    const current: Index[] = [baseIndex, { ...baseIndex, name: "test_idx2", column: "username" }];
+    const current: Index[] = [
+      baseIndex,
+      { ...baseIndex, name: "test_idx2", columns: ["username"] },
+    ];
     const desired: Index[] = [
       { ...baseIndex, unique: true },
-      { ...baseIndex, name: "test_idx3", column: "age" },
+      { ...baseIndex, name: "test_idx3", columns: ["age"] },
     ];
 
     const result = compareIndices(current, desired);

@@ -7,6 +7,8 @@ describe("compareTables", () => {
     type: "table",
     name,
     sql,
+    views: [],
+    num_cols: 1,
   });
 
   it("should detect added tables", () => {
