@@ -23,5 +23,5 @@ export function compareSchema(
   const primary_key = comparePrimaryKeys(current.primary_keys, desired.primary_keys);
   const trigger = compareTriggers(current.triggers, desired.triggers);
   const view = compareViews(current.views, desired.views);
-  return { table, column, index, foreign_key, primary_key, trigger, view };
+  return { table, column, index, foreign_key, primary_key, trigger, view, current, desired };
 }

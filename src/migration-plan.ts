@@ -7,7 +7,7 @@ import type {
   RecreateOperation,
   RenameOperation,
 } from "./migration-operation";
-import { columnsLookLikeRename } from "./utils";
+import { columnsLookLikeRename, invariant } from "./utils";
 
 export function createMigrationPlan(diff: SchemaDiff): MigrationPlan {
   /*
@@ -162,6 +162,9 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
   // Group columns by table for easier analysis
   const columnsByTable = new Map<string, { current: Column[]; desired: Column[] }>();
 
+  // Create map of tables to their full column lists
+  const tableColumns = new Map<string, Column[]>();
+
   // Initialize the map with tables from modified columns
   for (const { current } of diff.column.modified) {
     if (!columnsByTable.has(current.table)) {
@@ -185,9 +188,20 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
     }
   }
 
-  // Add tables with dropped columns
+  // Handle dropped columns - only require recreation if the column is not at the end
   for (const column of diff.column.removed) {
-    tablesRequiringRecreation.add(column.table);
+    const table = diff.current.tables.find((t) => t.name === column.table);
+    invariant(
+      table,
+      `Table '${column.table}' for column '${column.name}' is not in current schema`,
+    );
+    // Check if the dropped column is not the last column
+    // console.log(
+    //   `column.ordinal_position ${column.ordinal_position} < table.num_cols ${table.num_cols}`,
+    // );
+    if (column.ordinal_position + 1 < table.num_cols) {
+      tablesRequiringRecreation.add(column.table);
+    }
   }
 
   // Analyze column changes for each table

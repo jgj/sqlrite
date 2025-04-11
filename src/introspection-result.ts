@@ -21,6 +21,7 @@ const table = type({
   name: "string",
   sql: "string",
   views: "string[]",
+  num_cols: "number",
 });
 
 export type Table = typeof table.infer;
