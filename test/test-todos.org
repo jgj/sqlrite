@@ -14,8 +14,8 @@
 ** DONE 0017_composite_index | test creating composite index
 
 * Constraint Operations
-** TODO 0007_add_foreign_key | test adding a foreign key constraint
-** TODO 0008_add_unique_constraint | test adding a unique constraint
+** DONE 0007_add_foreign_key | test adding a foreign key constraint
+** DONE 0008_add_unique_constraint | test adding a unique constraint
 ** TODO 0009_add_check_constraint | test adding a check constraint
 ** TODO 0016_cascading_deletes | test foreign keys with cascade delete
 
