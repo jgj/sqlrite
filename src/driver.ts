@@ -7,7 +7,7 @@ import {
   isBetterSqlite3Database,
   isLibsqlClient,
 } from "./sqlite";
-import { result, type Result } from "./utils";
+import { type Result, result } from "./utils";
 
 export interface Driver {
   execute(sql: string): Promise<void>;

@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { compareForeignKeys } from "./compare-foreign-keys";
+import { describe, expect, it } from "vitest";
 import type { ForeignKey } from "~/introspection-result";
+import { compareForeignKeys } from "./compare-foreign-keys";
 
 const baseForeignKey: ForeignKey = {
   type: "foreign_key",

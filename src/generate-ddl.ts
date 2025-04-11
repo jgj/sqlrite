@@ -1,12 +1,12 @@
-import type { MigrationPlan } from "./migration-plan";
 import type {
-  Table,
   Column,
   Index,
+  IntrospectionResult,
+  Table,
   Trigger,
   View,
-  IntrospectionResult,
 } from "./introspection-result";
+import type { MigrationPlan } from "./migration-plan";
 import { sqlIdentifier as sql } from "./utils";
 
 export type DDLStatement = string;

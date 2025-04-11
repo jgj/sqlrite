@@ -1,4 +1,4 @@
-import type { Table, Column, Index, Trigger, View } from "./introspection-result";
+import type { Column, Index, Table, Trigger, View } from "./introspection-result";
 
 type OperationTarget = Table | Column | Index | Trigger | View;
 type OperationType = "create" | "drop" | "rename" | "recreate" | "rewrite";

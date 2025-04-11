@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { compareIndices } from "./compare-indices";
+import { describe, expect, it } from "vitest";
 import type { Index } from "~/introspection-result";
+import { compareIndices } from "./compare-indices";
 
 describe("compareIndices", () => {
   const baseIndex: Index = {

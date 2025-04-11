@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { compareSchema } from "./compare-schema";
 import { compareColumns } from "./compare/compare-columns";
 import { compareForeignKeys } from "./compare/compare-foreign-keys";
@@ -6,9 +6,9 @@ import { compareIndices } from "./compare/compare-indices";
 import { comparePrimaryKeys } from "./compare/compare-primary-keys";
 import { compareTables } from "./compare/compare-tables";
 import { compareTriggers } from "./compare/compare-triggers";
+import { compareViews } from "./compare/compare-views";
 import type { IntrospectionObjectType, IntrospectionResult } from "./introspection-result";
 import { cloneObject } from "./test-utils";
-import { compareViews } from "./compare/compare-views";
 
 vi.mock("./compare/compare-tables", () => ({
   compareTables: vi.fn().mockReturnValue({ added: [], removed: [], modified: [] }),

@@ -15,19 +15,10 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "paths": {
-      "~/*": [
-        "./src/*"
-      ],
-      "@/*": [
-        "./test/*"
-      ],
+      "~/*": ["./src/*"],
+      "@/*": ["./test/*"]
     }
   },
-  "include": [
-    "src",
-    "test"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["src", "test"],
+  "exclude": ["node_modules"]
 }

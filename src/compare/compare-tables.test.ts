@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { compareTables } from "./compare-tables";
+import { describe, expect, it } from "vitest";
 import type { Table } from "~/introspection-result";
+import { compareTables } from "./compare-tables";
 
 describe("compareTables", () => {
   const createTable = (name: string, sql: string): Table => ({

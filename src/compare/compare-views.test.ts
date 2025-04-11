@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { compareViews } from "./compare-views";
+import { describe, expect, it } from "vitest";
 import type { View } from "~/introspection-result";
+import { compareViews } from "./compare-views";
 
 describe("compareViews", () => {
   const baseView: View = {
