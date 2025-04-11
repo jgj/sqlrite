@@ -19,6 +19,7 @@ describe("introspect", () => {
                   name: "test_table",
                   sql: "CREATE TABLE test_table (id INTEGER PRIMARY KEY)",
                   views: [],
+                  num_cols: 1,
                 },
               ],
               columns: [

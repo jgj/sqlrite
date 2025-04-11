@@ -9,6 +9,7 @@ describe("parseIntrospectionResult", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
         views: [],
+        num_cols: 2,
       },
     ],
     columns: [
@@ -112,6 +113,8 @@ describe("parseIntrospectionResult", () => {
           type: "table",
           // Missing 'name' field
           sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+          views: [],
+          num_cols: 2,
         },
       ],
       columns: [],
@@ -131,6 +134,8 @@ describe("parseIntrospectionResult", () => {
           type: "table",
           name: 42, // Should be a string
           sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+          views: [],
+          num_cols: 2,
         },
       ],
       columns: [],
@@ -150,6 +155,7 @@ describe("parseIntrospectionResult", () => {
           type: "invalid_type", // Should be "table"
           name: "users",
           sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+          num_cols: 2,
         },
       ],
       columns: [],

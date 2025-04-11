@@ -167,3 +167,15 @@ export const result = (err?: unknown) => {
   }
   return { success: false, err: new UnknownError(err) } as Result;
 };
+
+export function sqlIdentifier(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+class InvariantError extends TypeError {}
+
+export function invariant(thing: unknown, msg = "Invariant received falsy value"): asserts thing {
+  if (thing) return;
+
+  throw new InvariantError(msg);
+}

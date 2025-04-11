@@ -4,6 +4,7 @@ import type {
   Index,
   IntrospectionObject,
   IntrospectionObjectType,
+  IntrospectionResult,
   PrimaryKey,
   Table,
   Trigger,
@@ -31,4 +32,6 @@ export interface SchemaDiff extends Record<IntrospectionObjectType, Diff<any>> {
   primary_key: Diff<PrimaryKey>;
   trigger: Diff<Trigger>;
   view: Diff<View>;
+  current: IntrospectionResult;
+  desired: IntrospectionResult;
 }

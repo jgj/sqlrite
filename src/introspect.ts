@@ -9,7 +9,13 @@ select
     (
       select
         json_group_array(
-          json_object('type', 'table', 'name', sch.name, 'sql', sch.sql ,'views', json_array())
+          json_object(
+            'type', 'table',
+            'name', sch.name,
+            'sql', sch.sql ,
+            'views', json_array(),
+            'num_cols', (select count(*) from pragma_table_info(sch.name))
+          )
         )
       from
         sqlite_schema sch

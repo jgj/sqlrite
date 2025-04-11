@@ -14,7 +14,7 @@ describe("sqlrite integration tests", () => {
     const testCases: TestCase[] = await loadTestCases();
     console.log(`loaded ${testCases.length} test cases`);
 
-    describe.each(testCases)("$description", ({ current, next, verify, filename }) => {
+    describe.each(testCases)("$filename $description", ({ current, next, verify, filename }) => {
       let client: SQLite;
       let driver: Driver;
 

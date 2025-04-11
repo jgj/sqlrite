@@ -1,5 +1,5 @@
 import { glob } from "glob";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import type { TestDriver } from "./test-driver";
 
 export interface TestCase {
@@ -35,7 +35,7 @@ export async function loadTestCases(): Promise<TestCase[]> {
     }
 
     testCases.push({
-      filename: file,
+      filename: basename(file),
       description: module.description,
       current: module.current,
       next: module.next,

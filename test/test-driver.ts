@@ -20,6 +20,9 @@ export function getTestDriver(driver: Driver, context: TestDriverContext) {
         `Contains a statement starting with '${startingWith}'`,
       );
     },
+    log() {
+      console.log(context.statements);
+    },
   } as const;
 
   return {
@@ -49,6 +52,15 @@ export function getTestDriver(driver: Driver, context: TestDriverContext) {
         result?.type.toUpperCase(),
         fmt(`Column '${column}' in table '${table}' has wrong type or doesn't exist`),
       ).toBe(dataType.toUpperCase());
+    },
+    async columnNotExists(table: string, column: string) {
+      const result = await exists(
+        `SELECT 1 FROM pragma_table_info('${table}') WHERE name = '${column}'`,
+      );
+      expect(
+        result,
+        fmt(`Column '${column}' still exists in table '${table}' but should have been dropped`),
+      ).toBe(false);
     },
     async columnHasConstraint(table: string, column: string, constraint: string) {
       const info = await selectOne<{ [key: string]: number }>(

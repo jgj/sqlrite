@@ -14,6 +14,24 @@ function createEmptySchemaDiff(): SchemaDiff {
     primary_key: { added: [], removed: [], modified: [] },
     trigger: { added: [], removed: [], modified: [] },
     view: { added: [], removed: [], modified: [] },
+    current: {
+      tables: [],
+      columns: [],
+      indices: [],
+      primary_keys: [],
+      foreign_keys: [],
+      triggers: [],
+      views: [],
+    },
+    desired: {
+      tables: [],
+      columns: [],
+      indices: [],
+      primary_keys: [],
+      foreign_keys: [],
+      triggers: [],
+      views: [],
+    },
   };
 }
 
@@ -27,6 +45,7 @@ describe("createMigrationPlan", () => {
           name: "new_table",
           sql: "CREATE TABLE new_table (id INTEGER PRIMARY KEY)",
           views: [],
+          num_cols: 1,
         },
       ];
 
@@ -45,6 +64,7 @@ describe("createMigrationPlan", () => {
           name: "old_table",
           sql: "CREATE TABLE old_table (id INTEGER PRIMARY KEY)",
           views: [],
+          num_cols: 1,
         },
       ];
 
@@ -63,6 +83,7 @@ describe("createMigrationPlan", () => {
           name: "new_name",
           sql: "CREATE TABLE new_name (id INTEGER PRIMARY KEY)",
           views: [],
+          num_cols: 1,
         },
       ];
       diff.table.removed = [
@@ -71,6 +92,7 @@ describe("createMigrationPlan", () => {
           name: "old_name",
           sql: "CREATE TABLE old_name (id INTEGER PRIMARY KEY)",
           views: [],
+          num_cols: 1,
         },
       ];
 
@@ -90,6 +112,7 @@ describe("createMigrationPlan", () => {
           name: "new_name",
           sql: "CREATE TABLE new_name (id INTEGER PRIMARY KEY, name TEXT)",
           views: [],
+          num_cols: 2,
         },
       ];
       diff.table.removed = [
@@ -98,6 +121,7 @@ describe("createMigrationPlan", () => {
           name: "old_name",
           sql: "CREATE TABLE old_name (id INTEGER PRIMARY KEY)",
           views: [],
+          num_cols: 1,
         },
       ];
 
@@ -116,12 +140,14 @@ describe("createMigrationPlan", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY)",
         views: [],
+        num_cols: 1,
       };
       const modifiedTable = {
         type: "table" as const,
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT UNIQUE)",
         views: [],
+        num_cols: 2,
       };
 
       diff.table.modified = [
@@ -197,6 +223,15 @@ describe("createMigrationPlan", () => {
 
     it("should generate column drop operations", () => {
       const diff = createEmptySchemaDiff();
+      const tableObj = {
+        type: "table" as const,
+        name: "users",
+        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT)",
+        views: [],
+        num_cols: 3,
+      };
+      diff.current.tables.push(tableObj);
+
       diff.column.removed = [
         {
           type: "column",
@@ -221,6 +256,14 @@ describe("createMigrationPlan", () => {
 
     it("should identify column renames", () => {
       const diff = createEmptySchemaDiff();
+      const tableObj = {
+        type: "table" as const,
+        name: "users",
+        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, old_name TEXT, email TEXT)",
+        views: [],
+        num_cols: 3,
+      };
+      diff.current.tables.push(tableObj);
 
       // Define a removed column and an added column with similar properties
       const removedColumn = {
@@ -261,6 +304,7 @@ describe("createMigrationPlan", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT)",
         views: [],
+        num_cols: 2,
       };
 
       diff.table.modified = [
@@ -318,6 +362,7 @@ describe("createMigrationPlan", () => {
         name: "orders",
         sql: "CREATE TABLE orders (id INTEGER, customer_id INTEGER, PRIMARY KEY(id))",
         views: [],
+        num_cols: 2,
       };
 
       diff.table.modified = [
@@ -367,6 +412,7 @@ describe("createMigrationPlan", () => {
         name: "orders",
         sql: "CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER)",
         views: [],
+        num_cols: 2,
       };
 
       diff.table.modified = [
@@ -409,6 +455,7 @@ describe("createMigrationPlan", () => {
         name: "orders",
         sql: "CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER, FOREIGN KEY (customer_id) REFERENCES customers(id))",
         views: [],
+        num_cols: 2,
       };
 
       const desiredTable = {
@@ -416,6 +463,7 @@ describe("createMigrationPlan", () => {
         name: "orders",
         sql: "CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER)",
         views: [],
+        num_cols: 2,
       };
 
       diff.table.modified = [
@@ -500,6 +548,7 @@ describe("createMigrationPlan", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT)",
         views: [],
+        num_cols: 2,
       };
 
       diff.table.modified = [
@@ -616,6 +665,7 @@ describe("createMigrationPlan", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
         views: [],
+        num_cols: 2,
       };
 
       diff.table.modified = [
@@ -674,6 +724,7 @@ describe("createMigrationPlan", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)",
         views: [],
+        num_cols: 2,
       };
 
       diff.table.modified = [
@@ -732,6 +783,7 @@ describe("createMigrationPlan", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)",
         views: [],
+        num_cols: 2,
       };
 
       // Another table with simple operations
@@ -740,6 +792,7 @@ describe("createMigrationPlan", () => {
         name: "posts",
         sql: "CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER, title TEXT)",
         views: [],
+        num_cols: 3,
       };
 
       diff.table.modified = [
@@ -840,16 +893,20 @@ describe("createMigrationPlan", () => {
       const usersTable = {
         type: "table" as const,
         name: "users",
-        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, count INTEGER, new_amount DECIMAL(10,2))",
+        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, count INTEGER, new_amount DECIMAL(10,2), created_at TEXT)",
         views: [],
+        num_cols: 4,
       };
+      diff.desired.tables.push(usersTable);
 
       const usersTableOld = {
         type: "table" as const,
         name: "users",
-        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, count INTEGER, amount INTEGER)",
+        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, count INTEGER, amount INTEGER, created_at TEXT)",
         views: [],
+        num_cols: 4,
       };
+      diff.current.tables.push(usersTableOld);
 
       diff.table.modified = [
         {
@@ -865,7 +922,7 @@ describe("createMigrationPlan", () => {
         name: "amount",
         table: "users",
         data_type: "INTEGER",
-        ordinal_position: 3,
+        ordinal_position: 2,
         nullable: true,
         character_maximum_length: null,
         precision: null,
@@ -878,7 +935,7 @@ describe("createMigrationPlan", () => {
         name: "new_amount",
         table: "users",
         data_type: "DECIMAL", // Changed from INTEGER
-        ordinal_position: 3,
+        ordinal_position: 2,
         nullable: true,
         character_maximum_length: null,
         precision: { precision: 10, scale: 2 }, // Added precision
@@ -920,6 +977,7 @@ describe("createMigrationPlan", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT)",
         views: [],
+        num_cols: 1,
       };
 
       const usersNew = {
@@ -927,6 +985,7 @@ describe("createMigrationPlan", () => {
         name: "users",
         sql: "CREATE TABLE users (id INTEGER, email TEXT, PRIMARY KEY(id, email))",
         views: [],
+        num_cols: 1,
       };
 
       // Define the 'posts' table that references users
@@ -935,6 +994,7 @@ describe("createMigrationPlan", () => {
         name: "posts",
         sql: "CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER, FOREIGN KEY(user_id) REFERENCES users(id))",
         views: [],
+        num_cols: 1,
       };
 
       const postsNew = {
@@ -942,6 +1002,7 @@ describe("createMigrationPlan", () => {
         name: "posts",
         sql: "CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER, user_email TEXT, FOREIGN KEY(user_id, user_email) REFERENCES users(id, email))",
         views: [],
+        num_cols: 1,
       };
 
       // Add table modifications
@@ -1074,6 +1135,7 @@ describe("createMigrationPlan", () => {
         name: "products",
         sql: "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price REAL, description TEXT)",
         views: [],
+        num_cols: 1,
       };
 
       // Same table with different column order
@@ -1082,6 +1144,7 @@ describe("createMigrationPlan", () => {
         name: "products",
         sql: "CREATE TABLE products (id INTEGER PRIMARY KEY, description TEXT, name TEXT, price REAL)",
         views: [],
+        num_cols: 1,
       };
 
       diff.table.modified = [
@@ -1231,6 +1294,7 @@ describe("createMigrationPlan", () => {
         name: "events",
         sql: "CREATE TABLE events (id INTEGER PRIMARY KEY, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
         views: [],
+        num_cols: 1,
       };
 
       // Same table but with changed default values
@@ -1239,6 +1303,7 @@ describe("createMigrationPlan", () => {
         name: "events",
         sql: "CREATE TABLE events (id INTEGER PRIMARY KEY, status TEXT DEFAULT 'new', created_at TIMESTAMP DEFAULT datetime('now'))",
         views: [],
+        num_cols: 1,
       };
 
       diff.table.modified = [

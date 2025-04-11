@@ -7,6 +7,7 @@ import type {
   View,
   IntrospectionResult,
 } from "./introspection-result";
+import { sqlIdentifier } from "./utils";
 
 export type DDLStatement = string;
 
@@ -99,11 +100,6 @@ function groupColumnsByTable(columns: Column[]): Record<string, Column[]> {
     acc[column.table].push(column);
     return acc;
   }, {});
-}
-
-// Helper to escape identifier names in SQL
-function sqlIdentifier(name: string): string {
-  return `"${name.replace(/"/g, '""')}"`;
 }
 
 // Helper to ensure SQL statements end with a semicolon

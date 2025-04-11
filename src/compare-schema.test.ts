@@ -41,7 +41,7 @@ vi.mock("./compare/compare-views", () => ({
 describe("compareSchema", () => {
   it("calls each comparison function with the correct portion of the schema", () => {
     const current: IntrospectionResult = {
-      tables: [{ type: "table", name: "test", sql: "" }],
+      tables: [{ type: "table", name: "test", sql: "", views: [], num_cols: 1 }],
       columns: [
         {
           type: "column",
@@ -75,7 +75,7 @@ describe("compareSchema", () => {
         { type: "primary_key", table: "test", column: "id", field_count: 1, definition: "" },
       ],
       triggers: [{ type: "trigger", name: "trg_test", table: "test", sql: "" }],
-      views: [{ type: "view", name: "trg_test", sql: "" }],
+      views: [{ type: "view", name: "trg_test", sql: "", tables: [] }],
     };
 
     const desired = cloneObject(current);
@@ -113,6 +113,8 @@ describe("compareSchema", () => {
       primary_key: { added: [], removed: [], modified: [] },
       trigger: { added: [], removed: [], modified: [] },
       view: { added: [], removed: [], modified: [] },
+      current,
+      desired,
     });
 
     for (const key of [
