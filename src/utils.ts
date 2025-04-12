@@ -179,3 +179,7 @@ export function invariant(thing: unknown, msg = "Invariant received falsy value"
 
   throw new InvariantError(msg);
 }
+
+export function isTesting() {
+  return process.env.NODE_ENV === "test";
+}

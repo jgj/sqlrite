@@ -1,5 +1,6 @@
 import type { Driver } from "./driver";
 import { parseIntrospectionResult } from "./introspection-result";
+import type { Column, Table } from "./introspection-result";
 import { findViewsDependingOnTable } from "./utils";
 
 const introspectionSql = /* sql */ `
@@ -88,7 +89,9 @@ select
               else 'null'
             end,
             'default',
-            coalesce(p.dflt_value, '')
+            coalesce(p.dflt_value, ''),
+            'check_constraint',
+            null
           )
         )
       from
@@ -217,6 +220,9 @@ export async function introspect(driver: Driver) {
 
   for (const table of ir.tables) {
     table.views = findViewsDependingOnTable(table, ir.views);
+
+    // Process check constraints for all columns in this table
+    processCheckConstraints(table, ir.columns);
   }
 
   for (const view of ir.views) {
@@ -224,4 +230,46 @@ export async function introspect(driver: Driver) {
   }
 
   return ir;
+}
+
+/**
+ * Extract check constraints for each column in a table by parsing the table's SQL
+ */
+
+const re = /\s+\w+(?:\s*\([^)]*\))?(?:\s+\w+)*?\s+CHECK\s*\(([^)]+)\)/i;
+
+function processCheckConstraints(table: Table, columns: Column[]) {
+  if (!table.sql) return;
+
+  const columnsInTable = columns.filter((col) => col.table === table.name);
+
+  // For each column in the table, look for check constraints
+  for (const column of columnsInTable) {
+    // First, extract the column definition section
+    const columnDefPattern = new RegExp(
+      `${column.name}\\s+\\w+(?:\\s*\\([^)]*\\))?(?:\\s+\\w+)*?\\s+CHECK\\s*\\(`,
+      "i",
+    );
+
+    const startMatch = columnDefPattern.exec(table.sql);
+    if (!startMatch) continue;
+
+    // Find the start position of the CHECK constraint content
+    const startPos = startMatch.index + startMatch[0].length;
+    let endPos = startPos;
+    let openParens = 1; // We've already encountered one open parenthesis
+
+    // Scan through the string to find the matching closing parenthesis
+    while (endPos < table.sql.length && openParens > 0) {
+      if (table.sql[endPos] === "(") openParens++;
+      else if (table.sql[endPos] === ")") openParens--;
+      endPos++;
+    }
+
+    if (openParens === 0) {
+      // We found the matching closing parenthesis
+      const checkContent = table.sql.substring(startPos, endPos - 1); // -1 to exclude the closing parenthesis
+      column.check_constraint = `CHECK (${checkContent})`;
+    }
+  }
 }

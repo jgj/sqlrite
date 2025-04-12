@@ -39,6 +39,7 @@ const column = type({
     scale: numberString,
   }).or(nullString),
   default: "string",
+  check_constraint: "string|null|undefined",
 });
 
 export type Column = typeof column.infer;

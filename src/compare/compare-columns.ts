@@ -40,6 +40,14 @@ function hasColumnLevelDifferences(current: Column, desired: Column) {
   if (current.ordinal_position !== desired.ordinal_position) changes.push("ordinal_position");
   if (current.default !== desired.default) changes.push("default");
 
+  // Check for differences in check constraints
+  if (
+    current.check_constraint !== desired.check_constraint &&
+    (current.check_constraint !== undefined || desired.check_constraint !== undefined)
+  ) {
+    changes.push("check_constraint");
+  }
+
   if (current.precision === null && desired.precision !== null) {
     changes.push("precision");
   } else if (current.precision !== null && desired.precision === null) {

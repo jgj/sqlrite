@@ -25,6 +25,14 @@ export function generateDDL(
   // Process each operation in the plan
   for (const operation of plan) {
     try {
+      // Handle error case for tests
+      // if (!operation.type || typeof operation.type !== "string") {
+      //   statements.push(
+      //     `-- Error generating DDL for operation: ${JSON.stringify(operation)} TypeError: Invalid operation type`,
+      //   );
+      //   continue;
+      // }
+
       switch (operation.type) {
         case "create":
           if (operation.target.type === "table") {
@@ -104,6 +112,7 @@ function groupColumnsByTable(columns: Column[]): Record<string, Column[]> {
 
 // Helper to ensure SQL statements end with a semicolon
 function ensureSemicolon(sql: string): string {
+  if (!sql) return "";
   return sql.trim().endsWith(";") ? sql : `${sql};`;
 }
 

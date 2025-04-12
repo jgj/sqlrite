@@ -23,6 +23,7 @@ describe("parseIntrospectionResult", () => {
         character_maximum_length: null,
         precision: null,
         default: "",
+        check_constraint: null,
       },
       {
         type: "column",
@@ -34,6 +35,7 @@ describe("parseIntrospectionResult", () => {
         character_maximum_length: null,
         precision: null,
         default: "",
+        check_constraint: null,
       },
     ],
     indices: [
@@ -186,6 +188,7 @@ describe("parseIntrospectionResult", () => {
             scale: 2,
           },
           default: "",
+          check_constraint: null,
         },
       ],
     };

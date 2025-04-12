@@ -72,6 +72,17 @@ export function getTestDriver(driver: Driver, context: TestDriverContext) {
         fmt(`Column '${column}' in table '${table}' missing ${constraint} constraint`),
       ).toBe(1);
     },
+    async columnHasCheckConstraint(table: string, column: string, check: string) {
+      const sql = await selectOne<{ sql: string }>(
+        `SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = '${table}'`,
+      );
+
+      const hasCheck = sql?.sql.includes(`CHECK (${check})`);
+      expect(
+        hasCheck,
+        fmt(`Column '${column}' in table '${table}' missing CHECK (${check}) constraint`),
+      ).toBe(true);
+    },
     async indexExists(table: string, indexName: string) {
       expect(
         await exists(

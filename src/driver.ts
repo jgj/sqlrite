@@ -7,7 +7,7 @@ import {
   isBetterSqlite3Database,
   isLibsqlClient,
 } from "./sqlite";
-import { type Result, result } from "./utils";
+import { isTesting, type Result, result } from "./utils";
 
 export interface Driver {
   execute(sql: string): Promise<void>;
@@ -32,7 +32,7 @@ const getLibsqlDriver: DriverFactory<Client> = (client: Client) => {
       await client.migrate(sql);
       return result();
     } catch (err) {
-      console.error(err);
+      !isTesting() && console.error(err);
       return result(err);
     }
   };
@@ -60,7 +60,7 @@ const getBetterSqlite3Driver: DriverFactory<Database> = (client: Database) => {
         .deferred(sql);
       return result();
     } catch (err) {
-      console.error(err);
+      !isTesting() && console.error(err);
       return result(err);
     }
   };
