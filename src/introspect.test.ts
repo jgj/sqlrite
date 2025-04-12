@@ -33,6 +33,7 @@ describe("introspect", () => {
                   character_maximum_length: "null",
                   precision: "null",
                   default: "",
+                  check_constraint: null,
                 },
               ],
               indices: [],
@@ -284,6 +285,75 @@ describe("introspect", () => {
       expect(referenceColumn).toBeDefined();
       expect(referenceColumn?.data_type).toBe("char");
       expect(referenceColumn?.character_maximum_length).toBe(8);
+    });
+
+    // Add this test within the integration tests describe.each block, alongside the other integration tests
+
+    it("should correctly extract column-level check constraints", async () => {
+      await executeStatements(`
+    CREATE TABLE products (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      price DECIMAL(10,2) CHECK (price >= 0 AND price <= 1000000),
+      rating INTEGER CHECK (rating BETWEEN 1 AND 5),
+      status TEXT CHECK (status IN ('active', 'inactive', 'pending')),
+      code TEXT CHECK (length(code) = 8),
+      discount_percent DECIMAL(5,2) CHECK (discount_percent >= 0 AND discount_percent <= 100)
+    );
+  `);
+
+      const result = await introspect(driver);
+
+      expect(result.columns).toHaveLength(7);
+
+      // Find and verify check constraints for each relevant column
+      const priceColumn = result.columns.find((c) => c.name === "price");
+      expect(priceColumn?.check_constraint).toContain("CHECK (price >= 0 AND price <= 1000000)");
+
+      const ratingColumn = result.columns.find((c) => c.name === "rating");
+      expect(ratingColumn?.check_constraint).toContain("CHECK (rating BETWEEN 1 AND 5)");
+
+      const statusColumn = result.columns.find((c) => c.name === "status");
+      expect(statusColumn?.check_constraint).toContain(
+        "CHECK (status IN ('active', 'inactive', 'pending'))",
+      );
+
+      const codeColumn = result.columns.find((c) => c.name === "code");
+      expect(codeColumn?.check_constraint).toContain("CHECK (length(code) = 8)");
+
+      const discountColumn = result.columns.find((c) => c.name === "discount_percent");
+      expect(discountColumn?.check_constraint).toContain(
+        "CHECK (discount_percent >= 0 AND discount_percent <= 100)",
+      );
+    });
+
+    it("should handle tables with multiple check constraints on different columns", async () => {
+      await executeStatements(`
+    CREATE TABLE orders (
+      id INTEGER PRIMARY KEY,
+      quantity INTEGER CHECK (quantity > 0),
+      total_amount DECIMAL(10,2) CHECK (total_amount > 0),
+      status TEXT CHECK (status IN ('pending', 'completed', 'cancelled')),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP CHECK (updated_at >= created_at)
+    );
+  `);
+
+      const result = await introspect(driver);
+
+      const quantityColumn = result.columns.find((c) => c.name === "quantity");
+      expect(quantityColumn?.check_constraint).toContain("CHECK (quantity > 0)");
+
+      const amountColumn = result.columns.find((c) => c.name === "total_amount");
+      expect(amountColumn?.check_constraint).toContain("CHECK (total_amount > 0)");
+
+      const statusColumn = result.columns.find((c) => c.name === "status");
+      expect(statusColumn?.check_constraint).toContain(
+        "CHECK (status IN ('pending', 'completed', 'cancelled'))",
+      );
+
+      const updatedAtColumn = result.columns.find((c) => c.name === "updated_at");
+      expect(updatedAtColumn?.check_constraint).toContain("CHECK (updated_at >= created_at)");
     });
 
     it("should introspect triggers", async () => {

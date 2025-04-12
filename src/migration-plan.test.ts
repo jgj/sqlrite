@@ -171,6 +171,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "",
+            check_constraint: null,
           },
           desired: {
             type: "column",
@@ -182,6 +183,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "",
+            check_constraint: null,
           },
           changes: ["data_type"],
         },
@@ -210,6 +212,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
       ];
 
@@ -243,6 +246,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
       ];
 
@@ -276,6 +280,7 @@ describe("createMigrationPlan", () => {
         character_maximum_length: null,
         precision: null,
         default: "",
+        check_constraint: null,
       };
 
       const addedColumn = {
@@ -328,6 +333,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "",
+            check_constraint: null,
           },
           desired: {
             type: "column",
@@ -339,6 +345,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "",
+            check_constraint: null,
           },
           changes: ["nullable"],
         },
@@ -689,6 +696,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "CURRENT_TIMESTAMP",
+            check_constraint: null,
           },
           desired: {
             type: "column",
@@ -700,6 +708,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "datetime('now')",
+            check_constraint: null,
           },
           changes: ["default"],
         },
@@ -748,6 +757,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "",
+            check_constraint: null,
           },
           desired: {
             type: "column",
@@ -759,6 +769,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "",
+            check_constraint: null,
           },
           changes: ["nullable"],
         },
@@ -813,6 +824,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "",
+            check_constraint: null,
           },
           desired: {
             type: "column",
@@ -824,6 +836,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: 255,
             precision: null,
             default: "",
+            check_constraint: null,
           },
           changes: ["data_type", "character_maximum_length"],
         },
@@ -841,6 +854,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
       ];
 
@@ -927,6 +941,7 @@ describe("createMigrationPlan", () => {
         character_maximum_length: null,
         precision: null,
         default: "",
+        check_constraint: null,
       };
 
       // Create the new column with a different name AND different data type
@@ -940,6 +955,7 @@ describe("createMigrationPlan", () => {
         character_maximum_length: null,
         precision: { precision: 10, scale: 2 }, // Added precision
         default: "",
+        check_constraint: null,
       };
 
       diff.column.removed = [oldColumn];
@@ -1073,6 +1089,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
       ];
 
@@ -1167,6 +1184,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
         {
           type: "column" as const,
@@ -1178,6 +1196,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
         {
           type: "column" as const,
@@ -1189,6 +1208,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
         {
           type: "column" as const,
@@ -1200,6 +1220,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
       ];
 
@@ -1214,6 +1235,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
         {
           type: "column" as const,
@@ -1225,6 +1247,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
         {
           type: "column" as const,
@@ -1236,6 +1259,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
         {
           type: "column" as const,
@@ -1247,6 +1271,7 @@ describe("createMigrationPlan", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
       ];
 
@@ -1327,6 +1352,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "'pending'",
+            check_constraint: null,
           },
           desired: {
             type: "column",
@@ -1338,6 +1364,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "'new'",
+            check_constraint: null,
           },
           changes: ["default"],
         },
@@ -1352,6 +1379,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "CURRENT_TIMESTAMP",
+            check_constraint: null,
           },
           desired: {
             type: "column",
@@ -1363,6 +1391,7 @@ describe("createMigrationPlan", () => {
             character_maximum_length: null,
             precision: null,
             default: "datetime('now')",
+            check_constraint: null,
           },
           changes: ["default"],
         },

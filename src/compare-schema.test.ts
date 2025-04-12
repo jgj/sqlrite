@@ -53,6 +53,7 @@ describe("compareSchema", () => {
           character_maximum_length: null,
           precision: null,
           default: "",
+          check_constraint: null,
         },
       ],
       indices: [

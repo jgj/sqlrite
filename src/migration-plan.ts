@@ -238,6 +238,12 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
           tablesRequiringRecreation.add(tableName);
           break;
         }
+
+        // Check constraint changes require recreation
+        if (changes.includes("check_constraint")) {
+          tablesRequiringRecreation.add(tableName);
+          break;
+        }
       }
     }
   }

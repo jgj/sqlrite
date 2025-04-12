@@ -12,6 +12,7 @@ const baseColumn: Column = {
   character_maximum_length: 255,
   precision: null,
   default: "",
+  check_constraint: null,
 };
 
 describe("compareColumns", () => {
