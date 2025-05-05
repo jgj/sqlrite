@@ -240,6 +240,12 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
           tablesRequiringRecreation.add(tableName);
           break;
         }
+        
+        // AUTOINCREMENT changes require recreation
+        if (changes.includes("autoincrement")) {
+          tablesRequiringRecreation.add(tableName);
+          break;
+        }
       }
     }
   }

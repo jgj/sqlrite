@@ -23,7 +23,7 @@
 ** DONE 0014_composite_primary_key | test table with composite primary key
 ** DONE 0015_default_values | test columns with default values
 ** DONE 0030_no_pk_table_create | test creating a table with no primary key
-** TODO 0031_autoincrement | test adding autoincrement to a primary key column
+** DONE 0031_autoincrement | test adding autoincrement to a primary key column
 
 * Table Rewrite Operations
 ** TODO 0021_table_rewrite_remove_not_null | test removing a NOT NULL constraint using table rewrite

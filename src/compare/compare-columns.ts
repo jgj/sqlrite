@@ -48,6 +48,11 @@ function hasColumnLevelDifferences(current: Column, desired: Column) {
     changes.push("check_constraint");
   }
 
+  // Check for autoincrement differences
+  if (current.autoincrement !== desired.autoincrement) {
+    changes.push("autoincrement");
+  }
+
   if (current.precision === null && desired.precision !== null) {
     changes.push("precision");
   } else if (current.precision !== null && desired.precision === null) {

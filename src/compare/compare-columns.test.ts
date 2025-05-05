@@ -13,6 +13,7 @@ const baseColumn: Column = {
   precision: null,
   default: "",
   check_constraint: null,
+  autoincrement: false,
 };
 
 describe("compareColumns", () => {

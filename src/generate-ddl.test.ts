@@ -142,6 +142,7 @@ describe("generateDDL", () => {
         precision: null,
         default: "",
         check_constraint: null,
+        autoincrement: false,
       };
 
       const plan: MigrationPlan = [
@@ -174,6 +175,7 @@ describe("generateDDL", () => {
         precision: null,
         default: "'user@example.com'",
         check_constraint: null,
+        autoincrement: false,
       };
 
       const plan: MigrationPlan = [
@@ -208,6 +210,7 @@ describe("generateDDL", () => {
         precision: { precision: 10, scale: 2 },
         default: "",
         check_constraint: null,
+        autoincrement: false,
       };
 
       const plan: MigrationPlan = [
@@ -240,6 +243,7 @@ describe("generateDDL", () => {
         precision: null,
         default: "",
         check_constraint: null,
+        autoincrement: false,
       };
 
       const plan: MigrationPlan = [
@@ -272,6 +276,7 @@ describe("generateDDL", () => {
         precision: null,
         default: "",
         check_constraint: null,
+        autoincrement: false,
       };
 
       const targetColumn: Column = {
@@ -285,6 +290,7 @@ describe("generateDDL", () => {
         precision: null,
         default: "",
         check_constraint: null,
+        autoincrement: false,
       };
 
       const plan: MigrationPlan = [
@@ -540,6 +546,7 @@ describe("generateDDL", () => {
           precision: null,
           default: "",
           check_constraint: null,
+          autoincrement: false,
         },
         {
           type: "column",
@@ -552,6 +559,7 @@ describe("generateDDL", () => {
           precision: null,
           default: "",
           check_constraint: null,
+          autoincrement: false,
         },
       ];
 
@@ -568,6 +576,7 @@ describe("generateDDL", () => {
           precision: null,
           default: "",
           check_constraint: null,
+          autoincrement: false,
         },
       ];
 
@@ -714,6 +723,7 @@ describe("generateDDL", () => {
             precision: null,
             default: "",
             check_constraint: null,
+            autoincrement: false,
           },
           {
             type: "column",
@@ -726,6 +736,7 @@ describe("generateDDL", () => {
             precision: null,
             default: "",
             check_constraint: null,
+            autoincrement: false,
           },
         ],
         views: [
@@ -760,6 +771,7 @@ describe("generateDDL", () => {
             precision: null,
             default: "",
             check_constraint: null,
+            autoincrement: false,
           },
           {
             type: "column",
@@ -772,6 +784,7 @@ describe("generateDDL", () => {
             precision: null,
             default: "",
             check_constraint: null,
+            autoincrement: false,
           },
           {
             type: "column",
@@ -784,6 +797,7 @@ describe("generateDDL", () => {
             precision: null,
             default: "",
             check_constraint: null,
+            autoincrement: false,
           },
         ],
         views: [
@@ -852,6 +866,7 @@ describe("generateDDL", () => {
         precision: null,
         default: "",
         check_constraint: null,
+        autoincrement: false,
       };
 
       const plan: MigrationPlan = [
