@@ -24,6 +24,7 @@ describe("parseIntrospectionResult", () => {
         precision: null,
         default: "",
         check_constraint: null,
+        autoincrement: false,
       },
       {
         type: "column",
@@ -36,6 +37,7 @@ describe("parseIntrospectionResult", () => {
         precision: null,
         default: "",
         check_constraint: null,
+        autoincrement: false,
       },
     ],
     indices: [
@@ -189,6 +191,7 @@ describe("parseIntrospectionResult", () => {
           },
           default: "",
           check_constraint: null,
+          autoincrement: false,
         },
       ],
     };

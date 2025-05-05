@@ -54,6 +54,7 @@ describe("compareSchema", () => {
           precision: null,
           default: "",
           check_constraint: null,
+          autoincrement: false,
         },
       ],
       indices: [

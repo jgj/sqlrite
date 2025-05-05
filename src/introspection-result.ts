@@ -39,7 +39,8 @@ const column = type({
     scale: numberString,
   }).or(nullString),
   default: "string",
-  check_constraint: "string|null|undefined",
+  check_constraint: "string|null",
+  autoincrement: boolString,
 });
 
 export type Column = typeof column.infer;
@@ -108,6 +109,7 @@ const schema = type({
 });
 
 export type IntrospectionResult = typeof schema.infer;
+export type IntrospectionResultInput = typeof schema.inferIn;
 
 export type IntrospectionObject = Table | Column | Index | ForeignKey | PrimaryKey | Trigger | View;
 export type IntrospectionObjectType = IntrospectionObject["type"];

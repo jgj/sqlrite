@@ -22,6 +22,8 @@ select
         sqlite_schema sch
       where
         sch.type = 'table'
+      and
+        sch.name not like 'sqlite_%'
     ),
     'columns',
     (
@@ -91,12 +93,16 @@ select
             'default',
             coalesce(p.dflt_value, ''),
             'check_constraint',
-            null
+            null,
+            'autoincrement',
+            'false'
           )
         )
       from
         sqlite_schema sch
         join pragma_table_info (sch.name) p on sch.type = 'table'
+      where
+        sch.name not like 'sqlite_%'
     ),
     'indices',
     (
@@ -222,7 +228,7 @@ export async function introspect(driver: Driver) {
     table.views = findViewsDependingOnTable(table, ir.views);
 
     // Process check constraints for all columns in this table
-    processCheckConstraints(table, ir.columns);
+    processColumns(table, ir.columns);
   }
 
   for (const view of ir.views) {
@@ -233,19 +239,25 @@ export async function introspect(driver: Driver) {
 }
 
 /**
- * Extract check constraints for each column in a table by parsing the table's SQL
+ * Extract check constraints and AUTO_INCREMENT for each column in a table by parsing the table's SQL
  */
 
-const re = /\s+\w+(?:\s*\([^)]*\))?(?:\s+\w+)*?\s+CHECK\s*\(([^)]+)\)/i;
-
-function processCheckConstraints(table: Table, columns: Column[]) {
+function processColumns(table: Table, columns: Column[]) {
   if (!table.sql) return;
 
   const columnsInTable = columns.filter((col) => col.table === table.name);
 
-  // For each column in the table, look for check constraints
+  // For each column in the table, look for check constraints and AUTOINCREMENT
   for (const column of columnsInTable) {
-    // First, extract the column definition section
+    // Check for AUTOINCREMENT on primary key columns
+    // The regex needs to be flexible with spacing and ordering of PRIMARY KEY AUTOINCREMENT
+    column.autoincrement = Boolean(
+      table.sql.match(
+        new RegExp(`${column.name}\\s+INTEGER\\s+PRIMARY\\s+KEY\\s+AUTOINCREMENT`, "i"),
+      ),
+    );
+
+    // First, extract the column definition section for CHECK constraint
     const columnDefPattern = new RegExp(
       `${column.name}\\s+\\w+(?:\\s*\\([^)]*\\))?(?:\\s+\\w+)*?\\s+CHECK\\s*\\(`,
       "i",

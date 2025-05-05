@@ -3,6 +3,7 @@ import { getDriver } from "./driver";
 import type { Driver } from "./driver";
 import { introspect } from "./introspect";
 import { type SQLite, getBetterSqlite3Database, getLibsqlClient } from "./sqlite";
+import type { IntrospectionResultInput } from "./introspection-result";
 
 describe("introspect", () => {
   // Basic unit test with a mock driver
@@ -34,6 +35,7 @@ describe("introspect", () => {
                   precision: "null",
                   default: "",
                   check_constraint: null,
+                  autoincrement: false,
                 },
               ],
               indices: [],
@@ -49,7 +51,7 @@ describe("introspect", () => {
               ],
               triggers: [],
               views: [],
-            }),
+            } as IntrospectionResultInput),
           },
         ],
         execute: async () => {},
@@ -174,6 +176,7 @@ describe("introspect", () => {
       expect(idColumn).toBeDefined();
       expect(idColumn?.data_type).toBe("integer");
       expect(idColumn?.nullable).toBe(false);
+      expect(idColumn?.autoincrement).toBe(false); // Not using AUTOINCREMENT keyword
 
       const nameColumn = result.columns.find((c) => c.name === "name");
       expect(nameColumn).toBeDefined();
@@ -427,6 +430,47 @@ describe("introspect", () => {
       expect(result.tables[0].sql).toContain(
         "CHECK (status IN ('available', 'discontinued', 'out_of_stock'))",
       );
+    });
+    
+    it("should detect AUTOINCREMENT on primary key columns", async () => {
+      await executeStatements(`
+        CREATE TABLE products (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          sku TEXT UNIQUE,
+          price REAL NOT NULL
+        );
+        
+        CREATE TABLE customers (
+          customer_id INTEGER PRIMARY KEY, -- Regular PK without AUTOINCREMENT
+          email TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL
+        );
+        
+        CREATE TABLE orders (
+          order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL,
+          order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+        );
+      `);
+
+      const result = await introspect(driver);
+
+      // Check products table
+      const productsIdColumn = result.columns.find(c => c.name === "id" && c.table === "products");
+      expect(productsIdColumn).toBeDefined();
+      expect(productsIdColumn?.autoincrement).toBe(true);
+      
+      // Check customers table (no autoincrement)
+      const customersIdColumn = result.columns.find(c => c.name === "customer_id" && c.table === "customers");
+      expect(customersIdColumn).toBeDefined();
+      expect(customersIdColumn?.autoincrement).toBe(false);
+      
+      // Check orders table
+      const ordersIdColumn = result.columns.find(c => c.name === "order_id" && c.table === "orders");
+      expect(ordersIdColumn).toBeDefined();
+      expect(ordersIdColumn?.autoincrement).toBe(true);
     });
 
     it("should handle composite foreign keys", async () => {
