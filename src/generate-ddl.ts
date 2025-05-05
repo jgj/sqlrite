@@ -7,7 +7,7 @@ import type {
   View,
 } from "./introspection-result";
 import type { MigrationPlan } from "./migration-plan";
-import { sqlIdentifier as sql } from "./utils";
+import { isTesting, sqlIdentifier as sql } from "./utils";
 
 export type DDLStatement = string;
 
@@ -25,14 +25,6 @@ export function generateDDL(
   // Process each operation in the plan
   for (const operation of plan) {
     try {
-      // Handle error case for tests
-      // if (!operation.type || typeof operation.type !== "string") {
-      //   statements.push(
-      //     `-- Error generating DDL for operation: ${JSON.stringify(operation)} TypeError: Invalid operation type`,
-      //   );
-      //   continue;
-      // }
-
       switch (operation.type) {
         case "create":
           if (operation.target.type === "table") {
@@ -90,7 +82,7 @@ export function generateDDL(
           break;
       }
     } catch (error) {
-      console.error("Error generating DDL for operation:", operation, error);
+      !isTesting() && console.error("Error generating DDL for operation:", operation, error);
       // Add the error as a comment in the SQL output for debugging
       statements.push(`-- Error generating DDL: ${error}`);
     }

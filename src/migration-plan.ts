@@ -195,10 +195,6 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
       table,
       `Table '${column.table}' for column '${column.name}' is not in current schema`,
     );
-    // Check if the dropped column is not the last column
-    // console.log(
-    //   `column.ordinal_position ${column.ordinal_position} < table.num_cols ${table.num_cols}`,
-    // );
     if (column.ordinal_position + 1 < table.num_cols) {
       tablesRequiringRecreation.add(column.table);
     }
@@ -488,7 +484,9 @@ function getColumnDrops(
 
 function getIndexDrops(diff: SchemaDiff, tablesToIgnore: Set<string>): DropOperation<Index>[] {
   return diff.index.removed
-    .filter((index) => !tablesToIgnore.has(index.table))
+    .filter(
+      (index) => !tablesToIgnore.has(index.table) && !index.name.startsWith("sqlite_autoindex"),
+    )
     .map((index) => ({
       type: "drop",
       current: index,
@@ -497,7 +495,9 @@ function getIndexDrops(diff: SchemaDiff, tablesToIgnore: Set<string>): DropOpera
 
 function getIndexCreates(diff: SchemaDiff, tablesToIgnore: Set<string>): CreateOperation<Index>[] {
   return diff.index.added
-    .filter((index) => !tablesToIgnore.has(index.table))
+    .filter(
+      (index) => !tablesToIgnore.has(index.table) && !index.name.startsWith("sqlite_autoindex"),
+    )
     .map((index) => ({
       type: "create",
       target: index,
