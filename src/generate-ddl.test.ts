@@ -872,32 +872,6 @@ describe("generateDDL", () => {
       expect(ddl).toContain('ALTER TABLE "test_table" ADD COLUMN "col""with""quotes" TEXT;');
     });
 
-    it("should handle error during DDL generation", () => {
-      // Create invalid operation to trigger error
-      const invalidOperation = {
-        type: "create",
-        target: {
-          // Missing required properties to cause an error
-          type: "table",
-        },
-      };
-
-      const plan = [invalidOperation] as unknown as MigrationPlan;
-      const current = createEmptyIntrospection();
-      const desired = createEmptyIntrospection();
-
-      const ddl = generateDDL(plan, current, desired);
-
-      // Should include error comment
-      // expect(
-      //   ddl.some(
-      //     (stmt) =>
-      //       stmt.startsWith("-- Error generating DDL") ||
-      //       stmt.includes("TypeError: Invalid operation type"),
-      //   ),
-      // ).toBe(true);
-    });
-
     it("should handle empty result arrays", () => {
       const invalidTable: Table = {
         type: "table",

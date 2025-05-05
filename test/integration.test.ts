@@ -12,7 +12,6 @@ describe("sqlrite integration tests", () => {
     // ["better-sqlite3", getBetterSqlite3Database],
   ])("using %s", async (clientName, getClient) => {
     const testCases: TestCase[] = await loadTestCases();
-    console.log(`loaded ${testCases.length} test cases`);
 
     const exc = testCases.find((c) => c.exclusive);
     const tests = exc ? [exc] : testCases;

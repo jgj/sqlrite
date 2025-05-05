@@ -21,7 +21,6 @@ export const next = `
 
 export async function verify(driver: TestDriver) {
   // Due to SQLite limitations, adding a UNIQUE constraint requires table recreation
-  driver.ddl.log();
   driver.ddl.expectStatementCount(4);
 
   // Verify new table exists with correct structure

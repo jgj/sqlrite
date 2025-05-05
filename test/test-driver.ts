@@ -83,6 +83,15 @@ export function getTestDriver(driver: Driver, context: TestDriverContext) {
         fmt(`Column '${column}' in table '${table}' missing CHECK (${check}) constraint`),
       ).toBe(true);
     },
+    async columnHasDefault(table: string, column: string, defaultValue: string) {
+      const info = await selectOne<{ dflt_value: string }>(
+        `SELECT dflt_value FROM pragma_table_info('${table}') WHERE name = '${column}'`,
+      );
+      expect(
+        info?.dflt_value,
+        fmt(`Column '${column}' in table '${table}' has wrong default value or no default`),
+      ).toBe(defaultValue);
+    },
     async indexExists(table: string, indexName: string) {
       expect(
         await exists(
@@ -128,6 +137,24 @@ export function getTestDriver(driver: Driver, context: TestDriverContext) {
         fkInfo,
         fmt(`Foreign key from ${fromTable}.${fromColumn} to ${toTable}.${toColumn} does not exist`),
       ).toBeDefined();
+    },
+    async tablePrimaryKeyColumns(table: string, expectedColumns: string[]) {
+      const result = await select<{ name: string }>(
+        `SELECT name FROM pragma_table_info('${table}') WHERE pk > 0 ORDER BY pk`,
+      );
+
+      const pkColumns = result.map((r) => r.name);
+      expect(
+        pkColumns.length,
+        fmt(`Table '${table}' has wrong number of primary key columns`),
+      ).toBe(expectedColumns.length);
+
+      expect(
+        pkColumns,
+        fmt(
+          `Table '${table}' has incorrect primary key columns. Expected: ${expectedColumns.join(", ")}`,
+        ),
+      ).toEqual(expectedColumns);
     },
   };
 }
