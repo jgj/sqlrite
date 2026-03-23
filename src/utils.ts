@@ -160,6 +160,19 @@ class UnknownError extends Error {
   }
 }
 
+export class MigrationError extends Error {
+  constructor(
+    readonly statementIndex: number,
+    readonly statement: string,
+    readonly cause: Error,
+  ) {
+    super(
+      `Migration failed at statement ${statementIndex + 1}:\n  ${statement}\n\nCause: ${cause.message}`,
+    );
+    this.name = "MigrationError";
+  }
+}
+
 export const result = (err?: unknown) => {
   if (err === undefined) return { success: true } as Result;
   if (err instanceof Error) {

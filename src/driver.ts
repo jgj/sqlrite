@@ -10,7 +10,7 @@ import {
   isLibsqlClient,
   isNodeSqliteDatabase,
 } from "./sqlite";
-import { type Result, isTesting, result } from "./utils";
+import { MigrationError, type Result, isTesting, result } from "./utils";
 
 export interface Driver {
   execute(sql: string): Promise<void>;
@@ -57,7 +57,13 @@ const getBetterSqlite3Driver: DriverFactory<Database> = (client: Database) => {
       client
         .transaction((stmts: string[]) => {
           client.pragma("foreign_keys = off");
-          for (const stmt of stmts) client.prepare(stmt).run();
+          for (let i = 0; i < stmts.length; i++) {
+            try {
+              client.prepare(stmts[i]).run();
+            } catch (err) {
+              throw err instanceof Error ? new MigrationError(i, stmts[i], err) : err;
+            }
+          }
           client.pragma("foreign_keys = on");
         })
         .deferred(sql);
@@ -83,7 +89,13 @@ const getNodeSqliteDriver: DriverFactory<DatabaseSync> = (client: DatabaseSync) 
     try {
       client.exec("PRAGMA foreign_keys = OFF");
       client.exec("BEGIN DEFERRED");
-      for (const stmt of sql) client.prepare(stmt).run();
+      for (let i = 0; i < sql.length; i++) {
+        try {
+          client.prepare(sql[i]).run();
+        } catch (err) {
+          throw err instanceof Error ? new MigrationError(i, sql[i], err) : err;
+        }
+      }
       client.exec("COMMIT");
       client.exec("PRAGMA foreign_keys = ON");
       return result();
