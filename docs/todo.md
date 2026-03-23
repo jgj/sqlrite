@@ -28,8 +28,17 @@
 - [ ] Column rename detection disambiguation (handle identical types)
 - [ ] Rollback/undo support
 
-## Phase 2: Query Builder / ORM Layer
+## Phase 2: Type-Safe Schema Definition
 - [ ] Type-safe schema definition DSL
-- [ ] Query builder with type inference
+- [ ] Generate DDL from schema definitions
+- [ ] Infer TypeScript types from schema definitions
+- [ ] Integration with migration engine (define desired schema in code, not SQL strings)
+
+## Phase 3: Query Builder
+- [ ] Query builder with type inference from schema definitions
 - [ ] Migration history tracking (optional)
+
+## Phase 4: CLI
 - [ ] CLI tool for running migrations
+- [ ] Schema diffing from command line
+- [ ] Migration plan preview (dry-run)
