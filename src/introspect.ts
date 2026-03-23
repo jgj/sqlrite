@@ -24,6 +24,10 @@ select
         sch.type = 'table'
       and
         sch.name not like 'sqlite_%'
+      and
+        sch.sql not like 'CREATE VIRTUAL TABLE%'
+      and
+        sch.sql not like 'CREATE TABLE ''%'
     ),
     'columns',
     (
@@ -103,6 +107,10 @@ select
         join pragma_table_info (sch.name) p on sch.type = 'table'
       where
         sch.name not like 'sqlite_%'
+      and
+        sch.sql not like 'CREATE VIRTUAL TABLE%'
+      and
+        sch.sql not like 'CREATE TABLE ''%'
     ),
     'indices',
     (
@@ -128,6 +136,9 @@ select
       from sqlite_schema sch
       join pragma_index_list(sch.name) idx on sch.type = 'table'
       join sqlite_schema i on i.name = idx.name and i.type = 'index'
+      where sch.name not like 'sqlite_%'
+      and sch.sql not like 'CREATE VIRTUAL TABLE%'
+      and sch.sql not like 'CREATE TABLE ''%'
     ),
     'foreign_keys',
     (
@@ -157,6 +168,12 @@ select
       from
         sqlite_schema sch
         join pragma_foreign_key_list (sch.name) fk on sch.type = 'table'
+      where
+        sch.name not like 'sqlite_%'
+      and
+        sch.sql not like 'CREATE VIRTUAL TABLE%'
+      and
+        sch.sql not like 'CREATE TABLE ''%'
     ),
     'primary_keys',
     (
@@ -185,6 +202,12 @@ select
             sqlite_schema sch
             join pragma_table_info (sch.name) p on sch.type = 'table'
             and p.pk > 0
+          where
+            sch.name not like 'sqlite_%'
+          and
+            sch.sql not like 'CREATE VIRTUAL TABLE%'
+          and
+            sch.sql not like 'CREATE TABLE ''%'
           group by
             sch.name
         ) pk
