@@ -1,5 +1,5 @@
 import { getDriver } from "./driver";
-import { getMigrationStatements } from "./migration-statements";
+import { getMigrationPreview } from "./migration-statements";
 import type { SQLite } from "./sqlite";
 
 /**
@@ -10,8 +10,8 @@ import type { SQLite } from "./sqlite";
  *            the desired database schema
  */
 export async function migrate(client: SQLite, ddl: string) {
-  const statements = await getMigrationStatements(client, ddl);
+  const { statements, warnings } = await getMigrationPreview(client, ddl);
   const driver = getDriver(client);
   const result = await driver.migrate(statements);
-  return { ...result, statements };
+  return { ...result, statements, warnings };
 }
