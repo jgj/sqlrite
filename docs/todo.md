@@ -3,8 +3,8 @@
 ## Phase 1: Migration Engine
 
 ### High Priority
-- [ ] Enable better-sqlite3 driver testing (currently commented out in integration tests)
-- [ ] Column rename during table recreation (map old→new names in INSERT...SELECT)
+- [x] Enable better-sqlite3 driver testing
+- [x] Column rename during table recreation (map old→new names in INSERT...SELECT)
 - [x] Recreate indexes after table recreation
 - [x] Recreate triggers and views after table recreation
 - [x] Handle generated columns in INSERT...SELECT (virtual columns excluded)
