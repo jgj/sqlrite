@@ -49,3 +49,27 @@ Known edge cases encountered during development and how they're handled.
 **Problem**: Similar to table renames — renaming a column appears as a column removed + column added.
 
 **Solution**: Two-pass heuristic matching: strict mode (exact type/constraint match) then relaxed mode (compatible type families like TEXT/VARCHAR/CHAR). This can produce false positives for tables with identically-typed columns, but covers the common case well.
+
+## ADD COLUMN NOT NULL Without Default
+
+**Problem**: SQLite's `ALTER TABLE ADD COLUMN` requires that NOT NULL columns have a default value. Without one, the operation fails because existing rows would have no value for the new column.
+
+**Solution**: The migration planner detects added NOT NULL columns without a default and triggers table recreation instead of ALTER TABLE ADD COLUMN.
+
+## Generated Columns in INSERT...SELECT
+
+**Problem**: During table recreation, `INSERT INTO temp SELECT ... FROM old` copies data for common columns. But generated columns (STORED and VIRTUAL) are auto-computed and cannot be inserted into.
+
+**Solution**: The DDL generator excludes generated columns from the INSERT...SELECT column list by checking the table SQL for `GENERATED ALWAYS AS` patterns.
+
+## Index Loss During Table Recreation
+
+**Problem**: The table recreation flow (create temp, copy, drop old, rename temp) drops all indexes on the original table. Indexes are not automatically transferred to the new table.
+
+**Solution**: After table recreation, the DDL generator appends CREATE INDEX statements for all non-autoindex indexes that should exist on the target table.
+
+## SQL Normalization Across Object Types
+
+**Problem**: Views, triggers, and indexes may have cosmetic SQL differences (quoting, whitespace) between their stored form and the user's desired DDL. This causes false "modifications" that trigger unnecessary drop+create operations.
+
+**Solution**: All SQL comparisons (tables, indexes, views, triggers) normalize SQL before comparing: removing unnecessary double quotes, collapsing whitespace, and normalizing punctuation.
