@@ -112,7 +112,7 @@ select
           'name', idx.name,
           'table', sch.name,
           'columns', (
-            select json_group_array(ic.name)
+            select json_group_array(coalesce(ic.name, '__expr__' || ic.seqno))
             from pragma_index_info(idx.name) ic
             order by ic.seqno
           ),
