@@ -73,3 +73,17 @@ Known edge cases encountered during development and how they're handled.
 **Problem**: Views, triggers, and indexes may have cosmetic SQL differences (quoting, whitespace) between their stored form and the user's desired DDL. This causes false "modifications" that trigger unnecessary drop+create operations.
 
 **Solution**: All SQL comparisons (tables, indexes, views, triggers) normalize SQL before comparing: removing unnecessary double quotes, collapsing whitespace, and normalizing punctuation.
+
+## Generated Columns and pragma_table_xinfo
+
+**Problem**: `pragma_table_info()` does not distinguish generated columns from regular columns. Regex-based detection from CREATE TABLE SQL is fragile.
+
+**Solution**: Use `pragma_table_xinfo()` which provides a `hidden` field: 0=normal, 2=virtual generated, 3=stored generated. This is reliable and doesn't require SQL parsing.
+
+**Gotcha**: When adding a generated column to an existing table, `ALTER TABLE ADD COLUMN` with `generateColumnDefinition()` doesn't include the `GENERATED ALWAYS AS` clause. Generated column additions always trigger table recreation.
+
+## Multi-Column Foreign Keys
+
+**Problem**: `pragma_foreign_key_list()` returns one row per column in a multi-column FK, all sharing the same `id`. The original code treated each row as a separate FK.
+
+**Solution**: Group FK rows by `(table_name, fk.id)` using a SQL subquery with `group_concat()` to combine column names. This matches the primary key convention where composite key columns are comma-separated.
