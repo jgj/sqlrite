@@ -7,7 +7,7 @@ import type {
   View,
 } from "./introspection-result";
 import type { MigrationPlan } from "./migration-plan";
-import { isTesting, sqlIdentifier as sql } from "./utils";
+import { columnsLookLikeRename, isTesting, sqlIdentifier as sql } from "./utils";
 
 export type DDLStatement = string;
 
@@ -237,23 +237,20 @@ function generateRecreateTableDDL(
   );
   statements.push(ensureSemicolon(createTempTableSQL));
 
-  // Get common columns between current and target tables,
-  // excluding generated columns (virtual/stored columns are auto-computed)
+  // Build column mapping: target column name -> source column name
+  // Handles both common columns (same name) and renamed columns
   const generatedColumns = new Set(
     targetColumns.filter((col) => isGeneratedColumn(col, targetTable)).map((col) => col.name),
   );
-  const commonColumnNames = currentColumns
-    .map((col) => col.name)
-    .filter(
-      (name) =>
-        targetColumns.some((targetCol) => targetCol.name === name) && !generatedColumns.has(name),
-    );
+
+  const columnMapping = buildColumnMapping(currentColumns, targetColumns, generatedColumns);
 
   // Copy data from old table to new table
-  if (commonColumnNames.length > 0) {
-    const columnList = commonColumnNames.map((name) => sql(name)).join(", ");
+  if (columnMapping.length > 0) {
+    const targetList = columnMapping.map(({ target }) => sql(target)).join(", ");
+    const sourceList = columnMapping.map(({ source }) => sql(source)).join(", ");
     statements.push(
-      `INSERT INTO ${sql(tempTableName)} (${columnList}) SELECT ${columnList} FROM ${sql(currentTable.name)};`,
+      `INSERT INTO ${sql(tempTableName)} (${targetList}) SELECT ${sourceList} FROM ${sql(currentTable.name)};`,
     );
   }
 
@@ -275,6 +272,61 @@ function generateRecreateTableDDL(
   }
 
   return statements;
+}
+
+// Build a mapping of target column names to source column names,
+// detecting renamed columns via heuristic matching
+function buildColumnMapping(
+  currentColumns: Column[],
+  targetColumns: Column[],
+  generatedColumns: Set<string>,
+): { source: string; target: string }[] {
+  const mapping: { source: string; target: string }[] = [];
+  const currentByName = new Map(currentColumns.map((col) => [col.name, col]));
+
+  // First pass: match columns with the same name
+  const unmatchedTarget: Column[] = [];
+  for (const targetCol of targetColumns) {
+    if (generatedColumns.has(targetCol.name)) continue;
+    if (currentByName.has(targetCol.name)) {
+      mapping.push({ source: targetCol.name, target: targetCol.name });
+    } else {
+      unmatchedTarget.push(targetCol);
+    }
+  }
+
+  // Second pass: detect renames among unmatched columns
+  if (unmatchedTarget.length > 0) {
+    const matchedTargetNames = new Set(mapping.map((m) => m.target));
+    const unmatchedCurrent = currentColumns.filter((col) => !matchedTargetNames.has(col.name));
+
+    const matchedCurrentIdxs = new Set<number>();
+    for (const targetCol of unmatchedTarget) {
+      for (let i = 0; i < unmatchedCurrent.length; i++) {
+        if (matchedCurrentIdxs.has(i)) continue;
+        if (columnsLookLikeRename(unmatchedCurrent[i], targetCol, true)) {
+          mapping.push({ source: unmatchedCurrent[i].name, target: targetCol.name });
+          matchedCurrentIdxs.add(i);
+          break;
+        }
+      }
+    }
+
+    // Relaxed pass for remaining unmatched
+    for (const targetCol of unmatchedTarget) {
+      if (mapping.some((m) => m.target === targetCol.name)) continue;
+      for (let i = 0; i < unmatchedCurrent.length; i++) {
+        if (matchedCurrentIdxs.has(i)) continue;
+        if (columnsLookLikeRename(unmatchedCurrent[i], targetCol, false)) {
+          mapping.push({ source: unmatchedCurrent[i].name, target: targetCol.name });
+          matchedCurrentIdxs.add(i);
+          break;
+        }
+      }
+    }
+  }
+
+  return mapping;
 }
 
 // Check if a column is a generated column by examining the table SQL
