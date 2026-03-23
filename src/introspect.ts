@@ -156,32 +156,45 @@ select
             'type',
             'foreign_key',
             'table',
-            sch.name,
+            fk_grouped.table_name,
             'column',
-            fk."from",
+            fk_grouped.from_cols,
             'name',
-            'fk_' || sch.name || '_' || fk."from" || '_' || fk."table" || '_' || fk."to", -- Generated foreign key name
+            'fk_' || fk_grouped.table_name || '_' || fk_grouped.from_cols || '_' || fk_grouped.ref_table || '_' || fk_grouped.to_cols,
             'referenced_table',
-            fk."table",
+            fk_grouped.ref_table,
             'referenced_column',
-            fk."to",
+            fk_grouped.to_cols,
             'on_update',
-            fk.on_update,
+            fk_grouped.on_update,
             'on_delete',
-            fk.on_delete,
+            fk_grouped.on_delete,
             'definition',
-            'FOREIGN KEY (' || fk."from" || ') REFERENCES ' || fk."table" || '(' || fk."to" || ')' || ' ON UPDATE ' || fk.on_update || ' ON DELETE ' || fk.on_delete
+            'FOREIGN KEY (' || fk_grouped.from_cols || ') REFERENCES ' || fk_grouped.ref_table || '(' || fk_grouped.to_cols || ') ON UPDATE ' || fk_grouped.on_update || ' ON DELETE ' || fk_grouped.on_delete
           )
         )
       from
-        sqlite_schema sch
-        join pragma_foreign_key_list (sch.name) fk on sch.type = 'table'
-      where
-        sch.name not like 'sqlite_%'
-      and
-        sch.sql not like 'CREATE VIRTUAL TABLE%'
-      and
-        sch.sql not like 'CREATE TABLE ''%'
+        (
+          select
+            sch.name as table_name,
+            fk.id as fk_id,
+            group_concat(fk."from") as from_cols,
+            fk."table" as ref_table,
+            group_concat(fk."to") as to_cols,
+            fk.on_update,
+            fk.on_delete
+          from
+            sqlite_schema sch
+            join pragma_foreign_key_list(sch.name) fk on sch.type = 'table'
+          where
+            sch.name not like 'sqlite_%'
+          and
+            sch.sql not like 'CREATE VIRTUAL TABLE%'
+          and
+            sch.sql not like 'CREATE TABLE ''%'
+          group by
+            sch.name, fk.id
+        ) fk_grouped
     ),
     'primary_keys',
     (
