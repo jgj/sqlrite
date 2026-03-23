@@ -1,7 +1,7 @@
 import type { Column, Index, Table, Trigger, View } from "./introspection-result";
 
 type OperationTarget = Table | Column | Index | Trigger | View;
-type OperationType = "create" | "drop" | "rename" | "recreate" | "rewrite";
+type OperationType = "create" | "drop" | "rename" | "recreate";
 type Operation<O extends OperationType, T extends OperationTarget> = {
   type: O;
   current?: T;
@@ -26,14 +26,8 @@ export type RecreateOperation = Operation<"recreate", Table> & {
   target: Table;
 };
 
-export type RewriteOperation = Operation<"rewrite", Table> & {
-  current: Table;
-  target: Table;
-};
-
 export type MigrationOperation =
   | CreateOperation<OperationTarget>
   | DropOperation<OperationTarget>
   | RenameOperation<OperationTarget>
-  | RecreateOperation
-  | RewriteOperation;
+  | RecreateOperation;

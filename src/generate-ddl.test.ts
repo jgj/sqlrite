@@ -613,7 +613,7 @@ describe("generateDDL", () => {
       expect(ddl).toContain('ALTER TABLE "temp_users" RENAME TO "users";');
     });
 
-    it("should handle simple schema rewrites without table recreation", () => {
+    it("should handle constraint changes with table recreation", () => {
       const currentTable: Table = {
         type: "table",
         name: "events",
@@ -630,9 +630,67 @@ describe("generateDDL", () => {
         num_cols: 2,
       };
 
+      const currentColumns: Column[] = [
+        {
+          type: "column",
+          name: "id",
+          table: "events",
+          data_type: "INTEGER",
+          ordinal_position: 1,
+          nullable: false,
+          character_maximum_length: null,
+          precision: null,
+          default: "",
+          check_constraint: null,
+          autoincrement: false,
+        },
+        {
+          type: "column",
+          name: "status",
+          table: "events",
+          data_type: "TEXT",
+          ordinal_position: 2,
+          nullable: true,
+          character_maximum_length: null,
+          precision: null,
+          default: "'pending'",
+          check_constraint: "status IN ('pending','done')",
+          autoincrement: false,
+        },
+      ];
+
+      const targetColumns: Column[] = [
+        {
+          type: "column",
+          name: "id",
+          table: "events",
+          data_type: "INTEGER",
+          ordinal_position: 1,
+          nullable: false,
+          character_maximum_length: null,
+          precision: null,
+          default: "",
+          check_constraint: null,
+          autoincrement: false,
+        },
+        {
+          type: "column",
+          name: "status",
+          table: "events",
+          data_type: "TEXT",
+          ordinal_position: 2,
+          nullable: true,
+          character_maximum_length: null,
+          precision: null,
+          default: "'new'",
+          check_constraint: null,
+          autoincrement: false,
+        },
+      ];
+
       const plan: MigrationPlan = [
         {
-          type: "rewrite",
+          type: "recreate",
           current: currentTable,
           target: targetTable,
         },
@@ -640,25 +698,25 @@ describe("generateDDL", () => {
 
       const current = createIntrospection({
         tables: [currentTable],
+        columns: currentColumns,
       });
 
       const desired = createIntrospection({
         tables: [targetTable],
+        columns: targetColumns,
       });
 
       const ddl = generateDDL(plan, current, desired);
 
-      // Check that we're using the schema modification approach
-      expect(ddl).toContain("BEGIN TRANSACTION;");
-      expect(ddl).toContain("PRAGMA writable_schema=ON;");
+      // Check that we're using table recreation
       expect(ddl).toContain(
-        "UPDATE sqlite_schema SET sql = 'CREATE TABLE events (id INTEGER PRIMARY KEY, status TEXT DEFAULT ''new'')' WHERE type = 'table' AND name = 'events';",
+        "CREATE TABLE \"temp_events\" (id INTEGER PRIMARY KEY, status TEXT DEFAULT 'new');",
       );
-      expect(ddl).toContain("PRAGMA writable_schema=OFF;");
-      expect(ddl).toContain("COMMIT;");
-
-      // Verify we're not doing table recreation
-      expect(ddl.every((stmt) => !stmt.includes("temp_events"))).toBe(true);
+      expect(ddl).toContain(
+        'INSERT INTO "temp_events" ("id", "status") SELECT "id", "status" FROM "events";',
+      );
+      expect(ddl).toContain('DROP TABLE "events";');
+      expect(ddl).toContain('ALTER TABLE "temp_events" RENAME TO "events";');
     });
 
     it("should handle multiple operations in correct order", () => {

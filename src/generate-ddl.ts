@@ -74,12 +74,6 @@ export function generateDDL(
             );
           }
           break;
-
-        case "rewrite":
-          if (operation.current.type === "table" && operation.target.type === "table") {
-            statements.push(...generateRewriteTableDDL(operation.target));
-          }
-          break;
       }
     } catch (error) {
       !isTesting() && console.error("Error generating DDL for operation:", operation, error);
@@ -240,31 +234,6 @@ function generateRecreateTableDDL(
 
   // Rename temporary table to target name
   statements.push(`ALTER TABLE ${sql(tempTableName)} RENAME TO ${sql(targetTable.name)};`);
-
-  return statements;
-}
-
-// Generate DDL for table schema rewrite
-function generateRewriteTableDDL(targetTable: Table): DDLStatement[] {
-  const statements: DDLStatement[] = [];
-
-  // Only alter constraints/defaults that don't affect storage format
-  statements.push("BEGIN TRANSACTION;");
-  statements.push("PRAGMA schema_version;"); // Get current schema version
-  statements.push("PRAGMA writable_schema=ON;");
-
-  // Update the table definition
-  statements.push(
-    `UPDATE sqlite_schema SET sql = ${sqlString(targetTable.sql)} WHERE type = 'table' AND name = ${sqlString(targetTable.name)};`,
-  );
-
-  // Increment schema version (actual version will be determined at runtime)
-  statements.push(
-    "PRAGMA schema_version = (SELECT max(schema_version) + 1 FROM pragma_schema_version);",
-  );
-  statements.push("PRAGMA writable_schema=OFF;");
-  statements.push("PRAGMA integrity_check;");
-  statements.push("COMMIT;");
 
   return statements;
 }
