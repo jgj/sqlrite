@@ -6,11 +6,13 @@
 - [ ] Enable better-sqlite3 driver testing (currently commented out in integration tests)
 - [ ] Column rename during table recreation (map old→new names in INSERT...SELECT)
 - [x] Recreate indexes after table recreation
+- [x] Recreate triggers and views after table recreation
 - [x] Handle generated columns in INSERT...SELECT (virtual columns excluded)
 - [x] Handle modified views/triggers/indexes (drop+create)
 - [x] Detect NOT NULL columns without default requiring recreation
+- [x] Normalize SQL comparison across all object types (tables, indexes, views, triggers)
+- [x] Handle expression indexes in introspection
 - [ ] Virtual table support (FTS5, R-Tree, etc.)
-- [ ] Recreate triggers after table recreation (when triggers reference the table)
 
 ### Medium Priority
 - [ ] Multi-column foreign key introspection (group `pragma_foreign_key_list` by id)
