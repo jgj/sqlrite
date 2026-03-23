@@ -64,12 +64,18 @@ export function generateDDL(
 
         case "recreate":
           if (operation.current.type === "table" && operation.target.type === "table") {
+            // Get indexes that should exist on the target table
+            const targetIndexes = next.indices.filter(
+              (idx) =>
+                idx.table === operation.target.name && !idx.name.startsWith("sqlite_autoindex"),
+            );
             statements.push(
               ...generateRecreateTableDDL(
                 operation.current,
                 operation.target,
                 currentColumnsByTable[operation.current.name] || [],
                 targetColumnsByTable[operation.target.name] || [],
+                targetIndexes,
               ),
             );
           }
@@ -204,6 +210,7 @@ function generateRecreateTableDDL(
   targetTable: Table,
   currentColumns: Column[],
   targetColumns: Column[],
+  targetIndexes: Index[] = [],
 ): DDLStatement[] {
   const statements: DDLStatement[] = [];
   const safeName = targetTable.name.replace(/[^a-zA-Z0-9_]/g, "_");
@@ -216,10 +223,17 @@ function generateRecreateTableDDL(
   );
   statements.push(ensureSemicolon(createTempTableSQL));
 
-  // Get common columns between current and target tables
+  // Get common columns between current and target tables,
+  // excluding generated columns (virtual/stored columns are auto-computed)
+  const generatedColumns = new Set(
+    targetColumns.filter((col) => isGeneratedColumn(col, targetTable)).map((col) => col.name),
+  );
   const commonColumnNames = currentColumns
     .map((col) => col.name)
-    .filter((name) => targetColumns.some((targetCol) => targetCol.name === name));
+    .filter(
+      (name) =>
+        targetColumns.some((targetCol) => targetCol.name === name) && !generatedColumns.has(name),
+    );
 
   // Copy data from old table to new table
   if (commonColumnNames.length > 0) {
@@ -235,7 +249,19 @@ function generateRecreateTableDDL(
   // Rename temporary table to target name
   statements.push(`ALTER TABLE ${sql(tempTableName)} RENAME TO ${sql(targetTable.name)};`);
 
+  // Recreate indexes that should exist on the target table
+  for (const index of targetIndexes) {
+    statements.push(generateCreateIndexDDL(index));
+  }
+
   return statements;
+}
+
+// Check if a column is a generated column by examining the table SQL
+function isGeneratedColumn(column: Column, table: Table): boolean {
+  if (!table.sql) return false;
+  const pattern = new RegExp(`\\b${column.name}\\b[^,)]*GENERATED\\s+ALWAYS\\s+AS`, "i");
+  return pattern.test(table.sql);
 }
 
 // Helper to properly quote SQL strings
