@@ -180,13 +180,19 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
   }
 
   // Handle added columns that can't use ALTER TABLE ADD COLUMN
-  // SQLite requires that NOT NULL columns added via ALTER TABLE have a default value
   for (const column of diff.column.added) {
+    // Skip columns on newly created tables
+    if (diff.table.added.some((t) => t.name === column.table)) continue;
+
+    // SQLite requires that NOT NULL columns added via ALTER TABLE have a default value
     if (!column.nullable && (!column.default || column.default.trim() === "")) {
-      // Can't ALTER TABLE ADD COLUMN for NOT NULL without default on existing table
-      if (!diff.table.added.some((t) => t.name === column.table)) {
-        tablesRequiringRecreation.add(column.table);
-      }
+      tablesRequiringRecreation.add(column.table);
+    }
+
+    // Generated columns require recreation — ALTER TABLE ADD COLUMN doesn't
+    // include the GENERATED ALWAYS AS clause in the column definition
+    if (column.generated !== "none") {
+      tablesRequiringRecreation.add(column.table);
     }
   }
 
@@ -246,6 +252,12 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
 
         // AUTOINCREMENT changes require recreation
         if (changes.includes("autoincrement")) {
+          tablesRequiringRecreation.add(tableName);
+          break;
+        }
+
+        // Generated column changes require recreation
+        if (changes.includes("generated")) {
           tablesRequiringRecreation.add(tableName);
           break;
         }

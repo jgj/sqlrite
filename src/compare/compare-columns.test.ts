@@ -14,6 +14,7 @@ const baseColumn: Column = {
   default: "",
   check_constraint: null,
   autoincrement: false,
+  generated: "none",
 };
 
 describe("compareColumns", () => {

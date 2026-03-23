@@ -240,7 +240,7 @@ function generateRecreateTableDDL(
   // Build column mapping: target column name -> source column name
   // Handles both common columns (same name) and renamed columns
   const generatedColumns = new Set(
-    targetColumns.filter((col) => isGeneratedColumn(col, targetTable)).map((col) => col.name),
+    targetColumns.filter((col) => col.generated !== "none").map((col) => col.name),
   );
 
   const columnMapping = buildColumnMapping(currentColumns, targetColumns, generatedColumns);
@@ -327,13 +327,6 @@ function buildColumnMapping(
   }
 
   return mapping;
-}
-
-// Check if a column is a generated column by examining the table SQL
-function isGeneratedColumn(column: Column, table: Table): boolean {
-  if (!table.sql) return false;
-  const pattern = new RegExp(`\\b${column.name}\\b[^,)]*GENERATED\\s+ALWAYS\\s+AS`, "i");
-  return pattern.test(table.sql);
 }
 
 // Helper to properly quote SQL strings

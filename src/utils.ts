@@ -90,6 +90,7 @@ export function columnsLookLikeRename(
   if (strictMode) {
     return (
       basicMatch &&
+      removed.generated === added.generated &&
       areValuesSimilar(removed.character_maximum_length, added.character_maximum_length) &&
       areValuesSimilar(removed.precision, added.precision) &&
       areValuesSimilar(removed.default, added.default)

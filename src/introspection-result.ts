@@ -26,6 +26,8 @@ const table = type({
 
 export type Table = typeof table.infer;
 
+const generatedType = type("'none'|'stored'|'virtual'");
+
 const column = type({
   type: '"column"',
   name: "string",
@@ -41,6 +43,7 @@ const column = type({
   default: "string",
   check_constraint: "string|null",
   autoincrement: boolString,
+  generated: generatedType,
 });
 
 export type Column = typeof column.infer;

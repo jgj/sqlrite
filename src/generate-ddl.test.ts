@@ -143,6 +143,7 @@ describe("generateDDL", () => {
         default: "",
         check_constraint: null,
         autoincrement: false,
+        generated: "none",
       };
 
       const plan: MigrationPlan = [
@@ -176,6 +177,7 @@ describe("generateDDL", () => {
         default: "'user@example.com'",
         check_constraint: null,
         autoincrement: false,
+        generated: "none",
       };
 
       const plan: MigrationPlan = [
@@ -211,6 +213,7 @@ describe("generateDDL", () => {
         default: "",
         check_constraint: null,
         autoincrement: false,
+        generated: "none",
       };
 
       const plan: MigrationPlan = [
@@ -244,6 +247,7 @@ describe("generateDDL", () => {
         default: "",
         check_constraint: null,
         autoincrement: false,
+        generated: "none",
       };
 
       const plan: MigrationPlan = [
@@ -277,6 +281,7 @@ describe("generateDDL", () => {
         default: "",
         check_constraint: null,
         autoincrement: false,
+        generated: "none",
       };
 
       const targetColumn: Column = {
@@ -291,6 +296,7 @@ describe("generateDDL", () => {
         default: "",
         check_constraint: null,
         autoincrement: false,
+        generated: "none",
       };
 
       const plan: MigrationPlan = [
@@ -547,6 +553,7 @@ describe("generateDDL", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none",
         },
         {
           type: "column",
@@ -560,6 +567,7 @@ describe("generateDDL", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none",
         },
       ];
 
@@ -577,6 +585,7 @@ describe("generateDDL", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none",
         },
       ];
 
@@ -643,6 +652,7 @@ describe("generateDDL", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none",
         },
         {
           type: "column",
@@ -656,6 +666,7 @@ describe("generateDDL", () => {
           default: "'pending'",
           check_constraint: "status IN ('pending','done')",
           autoincrement: false,
+          generated: "none",
         },
       ];
 
@@ -672,6 +683,7 @@ describe("generateDDL", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none",
         },
         {
           type: "column",
@@ -685,6 +697,7 @@ describe("generateDDL", () => {
           default: "'new'",
           check_constraint: null,
           autoincrement: false,
+          generated: "none",
         },
       ];
 
@@ -782,6 +795,7 @@ describe("generateDDL", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none",
           },
           {
             type: "column",
@@ -795,6 +809,7 @@ describe("generateDDL", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none",
           },
         ],
         views: [
@@ -830,6 +845,7 @@ describe("generateDDL", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none",
           },
           {
             type: "column",
@@ -843,6 +859,7 @@ describe("generateDDL", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none",
           },
           {
             type: "column",
@@ -856,6 +873,7 @@ describe("generateDDL", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none",
           },
         ],
         views: [
@@ -925,6 +943,7 @@ describe("generateDDL", () => {
         default: "",
         check_constraint: null,
         autoincrement: false,
+        generated: "none",
       };
 
       const plan: MigrationPlan = [
