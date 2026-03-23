@@ -179,6 +179,17 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
     }
   }
 
+  // Handle added columns that can't use ALTER TABLE ADD COLUMN
+  // SQLite requires that NOT NULL columns added via ALTER TABLE have a default value
+  for (const column of diff.column.added) {
+    if (!column.nullable && (!column.default || column.default.trim() === "")) {
+      // Can't ALTER TABLE ADD COLUMN for NOT NULL without default on existing table
+      if (!diff.table.added.some((t) => t.name === column.table)) {
+        tablesRequiringRecreation.add(column.table);
+      }
+    }
+  }
+
   // Handle dropped columns - only require recreation if the column is not at the end
   for (const column of diff.column.removed) {
     const table = diff.current.tables.find((t) => t.name === column.table);
