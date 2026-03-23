@@ -12,14 +12,15 @@
 - [x] Detect NOT NULL columns without default requiring recreation
 - [x] Normalize SQL comparison across all object types (tables, indexes, views, triggers)
 - [x] Handle expression indexes in introspection
-- [ ] Virtual table support (FTS5, R-Tree, etc.)
+- [ ] Virtual table support (FTS5, R-Tree, etc.) — currently ignored safely
+- [x] Add node:sqlite (DatabaseSync) as third supported driver
 
 ### Medium Priority
-- [ ] Multi-column foreign key introspection (group `pragma_foreign_key_list` by id)
-- [ ] Use `pragma_table_xinfo` for generated column detection (currently parsed from SQL)
-- [ ] Foreign key safety: verify PRAGMA foreign_keys handling in both drivers
-- [ ] Dry-run mode (generate DDL without executing)
-- [ ] Better error messages with context about what operation failed
+- [x] Multi-column foreign key introspection (group `pragma_foreign_key_list` by id)
+- [x] Use `pragma_table_xinfo` for generated column detection
+- [x] Foreign key safety: verified PRAGMA foreign_keys handling across all 3 drivers
+- [x] Dry-run mode (`dryRun` export)
+- [x] Better error messages with MigrationError context (statement index + SQL)
 
 ### Low Priority
 - [ ] Performance with large schemas (hundreds of tables)
