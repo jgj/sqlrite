@@ -64,11 +64,13 @@ export function generateDDL(
 
         case "recreate":
           if (operation.current.type === "table" && operation.target.type === "table") {
-            // Get indexes that should exist on the target table
+            const tableName = operation.target.name;
+            // Get dependent objects that should exist on the target table
             const targetIndexes = next.indices.filter(
-              (idx) =>
-                idx.table === operation.target.name && !idx.name.startsWith("sqlite_autoindex"),
+              (idx) => idx.table === tableName && !idx.name.startsWith("sqlite_autoindex"),
             );
+            const targetTriggers = next.triggers.filter((t) => t.table === tableName);
+            const targetViews = next.views.filter((v) => v.tables.includes(tableName));
             statements.push(
               ...generateRecreateTableDDL(
                 operation.current,
@@ -76,6 +78,8 @@ export function generateDDL(
                 currentColumnsByTable[operation.current.name] || [],
                 targetColumnsByTable[operation.target.name] || [],
                 targetIndexes,
+                targetTriggers,
+                targetViews,
               ),
             );
           }
@@ -211,10 +215,20 @@ function generateRecreateTableDDL(
   currentColumns: Column[],
   targetColumns: Column[],
   targetIndexes: Index[] = [],
+  targetTriggers: Trigger[] = [],
+  targetViews: View[] = [],
 ): DDLStatement[] {
   const statements: DDLStatement[] = [];
   const safeName = targetTable.name.replace(/[^a-zA-Z0-9_]/g, "_");
   const tempTableName = `temp_${safeName}`;
+
+  // Drop dependent views and triggers first (they reference the table by name)
+  for (const view of targetViews) {
+    statements.push(generateDropViewDDL(view));
+  }
+  for (const trigger of targetTriggers) {
+    statements.push(generateDropTriggerDDL(trigger));
+  }
 
   // Create temporary table with new schema
   const createTempTableSQL = targetTable.sql.replace(
@@ -249,9 +263,15 @@ function generateRecreateTableDDL(
   // Rename temporary table to target name
   statements.push(`ALTER TABLE ${sql(tempTableName)} RENAME TO ${sql(targetTable.name)};`);
 
-  // Recreate indexes that should exist on the target table
+  // Recreate dependent objects that were dropped with the old table
   for (const index of targetIndexes) {
     statements.push(generateCreateIndexDDL(index));
+  }
+  for (const trigger of targetTriggers) {
+    statements.push(generateCreateTriggerDDL(trigger));
+  }
+  for (const view of targetViews) {
+    statements.push(generateCreateViewDDL(view));
   }
 
   return statements;
