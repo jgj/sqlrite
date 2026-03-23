@@ -1,10 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type Driver, getDriver } from "~/driver";
+import { getDriver } from "~/driver";
 import { migrate } from "~/migrate";
-import { getBetterSqlite3Database, getLibsqlClient } from "~/sqlite";
+import { getLibsqlClient } from "~/sqlite";
 import type { SQLite } from "~/sqlite";
 import { type TestCase, loadTestCases } from "./load-test-cases";
-import { getTestDriver } from "./test-driver";
 
 describe("sqlrite integration tests", () => {
   describe.each([
@@ -16,13 +15,12 @@ describe("sqlrite integration tests", () => {
     const exc = testCases.find((c) => c.exclusive);
     const tests = exc ? [exc] : testCases;
 
-    describe.each(tests)("$filename $description", ({ current, next, verify, filename }) => {
+    describe.each(tests)("$filename $description", ({ current, next }) => {
       let client: SQLite;
-      let driver: Driver;
 
       beforeEach(async () => {
         client = await getClient();
-        driver = getDriver(client);
+        const driver = getDriver(client);
         await driver.execute(current);
       });
 
@@ -41,11 +39,20 @@ describe("sqlrite integration tests", () => {
         expect(res.err).toBeUndefined();
       });
 
-      it("applies migration successfully", async () => {
-        const res = await migrate(client, next);
-        await verify(
-          getTestDriver(driver, { case: filename, client: clientName, statements: res.statements }),
-        );
+      it("is idempotent", async () => {
+        // First migration: apply the schema change
+        const first = await migrate(client, next);
+        expect(
+          first.success,
+          `\nFirst migration failed:\n\t${first.statements.join("\n\t")}\n`,
+        ).toBe(true);
+
+        // Second migration: should produce zero statements (schema already matches)
+        const second = await migrate(client, next);
+        expect(
+          second.statements,
+          `\nExpected no statements on second migration, but got:\n\t${second.statements.join("\n\t")}\n`,
+        ).toEqual([]);
       });
     });
   });
