@@ -36,7 +36,14 @@ function hasTriggerLevelDifferences(current: Trigger, desired: Trigger) {
   const changes: (keyof Trigger)[] = [];
 
   if (current.table !== desired.table) changes.push("table");
-  if (current.sql !== desired.sql) changes.push("sql");
+  if (normalizeSql(current.sql) !== normalizeSql(desired.sql)) changes.push("sql");
 
   return changes;
+}
+
+function normalizeSql(sql: string): string {
+  return sql
+    .replace(/"([a-zA-Z_][a-zA-Z0-9_]*)"/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
 }

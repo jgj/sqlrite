@@ -500,64 +500,94 @@ function getColumnDrops(
 }
 
 function getIndexDrops(diff: SchemaDiff, tablesToIgnore: Set<string>): DropOperation<Index>[] {
-  return diff.index.removed
+  const removed = diff.index.removed.filter(
+    (index) => !tablesToIgnore.has(index.table) && !index.name.startsWith("sqlite_autoindex"),
+  );
+  // Modified indexes need to be dropped and recreated
+  const modified = diff.index.modified
     .filter(
-      (index) => !tablesToIgnore.has(index.table) && !index.name.startsWith("sqlite_autoindex"),
+      ({ current }) =>
+        !tablesToIgnore.has(current.table) && !current.name.startsWith("sqlite_autoindex"),
     )
-    .map((index) => ({
-      type: "drop",
-      current: index,
-    }));
+    .map(({ current }) => current);
+
+  return [...removed, ...modified].map((index) => ({
+    type: "drop",
+    current: index,
+  }));
 }
 
 function getIndexCreates(diff: SchemaDiff, tablesToIgnore: Set<string>): CreateOperation<Index>[] {
-  return diff.index.added
+  const added = diff.index.added.filter(
+    (index) => !tablesToIgnore.has(index.table) && !index.name.startsWith("sqlite_autoindex"),
+  );
+  // Modified indexes need to be dropped and recreated
+  const modified = diff.index.modified
     .filter(
-      (index) => !tablesToIgnore.has(index.table) && !index.name.startsWith("sqlite_autoindex"),
+      ({ desired }) =>
+        !tablesToIgnore.has(desired.table) && !desired.name.startsWith("sqlite_autoindex"),
     )
-    .map((index) => ({
-      type: "create",
-      target: index,
-    }));
+    .map(({ desired }) => desired);
+
+  return [...added, ...modified].map((index) => ({
+    type: "create",
+    target: index,
+  }));
 }
 
 function getTriggerDrops(diff: SchemaDiff, tablesToIgnore: Set<string>): DropOperation<Trigger>[] {
-  return diff.trigger.removed
-    .filter((trigger) => !tablesToIgnore.has(trigger.table))
-    .map((trigger) => ({
-      type: "drop",
-      current: trigger,
-    }));
+  const removed = diff.trigger.removed.filter((trigger) => !tablesToIgnore.has(trigger.table));
+  const modified = diff.trigger.modified
+    .filter(({ current }) => !tablesToIgnore.has(current.table))
+    .map(({ current }) => current);
+
+  return [...removed, ...modified].map((trigger) => ({
+    type: "drop",
+    current: trigger,
+  }));
 }
 
 function getTriggerCreates(
   diff: SchemaDiff,
   tablesToIgnore: Set<string>,
 ): CreateOperation<Trigger>[] {
-  return diff.trigger.added
-    .filter((trigger) => !tablesToIgnore.has(trigger.table))
-    .map((trigger) => ({
-      type: "create",
-      target: trigger,
-    }));
+  const added = diff.trigger.added.filter((trigger) => !tablesToIgnore.has(trigger.table));
+  const modified = diff.trigger.modified
+    .filter(({ desired }) => !tablesToIgnore.has(desired.table))
+    .map(({ desired }) => desired);
+
+  return [...added, ...modified].map((trigger) => ({
+    type: "create",
+    target: trigger,
+  }));
 }
 
 function getViewDrops(diff: SchemaDiff, tablesToIgnore: Set<string>): DropOperation<View>[] {
-  return diff.view.removed
-    .filter((view) => !view.tables.some((table) => tablesToIgnore.has(table)))
-    .map((view) => ({
-      type: "drop",
-      current: view,
-    }));
+  const removed = diff.view.removed.filter(
+    (view) => !view.tables.some((table) => tablesToIgnore.has(table)),
+  );
+  const modified = diff.view.modified
+    .filter(({ current }) => !current.tables.some((table) => tablesToIgnore.has(table)))
+    .map(({ current }) => current);
+
+  return [...removed, ...modified].map((view) => ({
+    type: "drop",
+    current: view,
+  }));
 }
 
 function getViewCreates(diff: SchemaDiff, tablesToIgnore: Set<string>): CreateOperation<View>[] {
-  return diff.view.added
-    .filter((view) => !view.tables.some((table) => tablesToIgnore.has(table)))
-    .map((view) => ({
-      type: "create",
-      target: view,
-    }));
+  const added = diff.view.added.filter(
+    (view) => !view.tables.some((table) => tablesToIgnore.has(table)),
+  );
+  const modified = diff.view.modified
+    .filter(({ desired }) => !desired.tables.some((table) => tablesToIgnore.has(table)))
+    .map(({ desired }) => desired);
+
+  return [...added, ...modified].map((view) => ({
+    type: "create",
+    target: view,
+  }));
 }
 
 export type MigrationPlan = MigrationOperation[];
