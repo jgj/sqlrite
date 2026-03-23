@@ -173,6 +173,7 @@ describe("createMigrationPlan", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           desired: {
             type: "column",
@@ -186,6 +187,7 @@ describe("createMigrationPlan", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           changes: ["data_type"],
         },
@@ -216,6 +218,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
       ];
 
@@ -251,6 +254,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
       ];
 
@@ -286,6 +290,7 @@ describe("createMigrationPlan", () => {
         default: "",
         check_constraint: null,
         autoincrement: false,
+        generated: "none" as const,
       };
 
       const addedColumn = {
@@ -340,6 +345,7 @@ describe("createMigrationPlan", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           desired: {
             type: "column",
@@ -353,6 +359,7 @@ describe("createMigrationPlan", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           changes: ["nullable"],
         },
@@ -705,6 +712,7 @@ describe("createMigrationPlan", () => {
             default: "CURRENT_TIMESTAMP",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           desired: {
             type: "column",
@@ -718,6 +726,7 @@ describe("createMigrationPlan", () => {
             default: "datetime('now')",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           changes: ["default"],
         },
@@ -767,6 +776,7 @@ describe("createMigrationPlan", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           desired: {
             type: "column",
@@ -780,6 +790,7 @@ describe("createMigrationPlan", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           changes: ["nullable"],
         },
@@ -835,6 +846,7 @@ describe("createMigrationPlan", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           desired: {
             type: "column",
@@ -848,6 +860,7 @@ describe("createMigrationPlan", () => {
             default: "",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           changes: ["data_type", "character_maximum_length"],
         },
@@ -867,6 +880,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
       ];
 
@@ -955,6 +969,7 @@ describe("createMigrationPlan", () => {
         default: "",
         check_constraint: null,
         autoincrement: false,
+        generated: "none" as const,
       };
 
       // Create the new column with a different name AND different data type
@@ -970,6 +985,7 @@ describe("createMigrationPlan", () => {
         default: "",
         check_constraint: null,
         autoincrement: false,
+        generated: "none" as const,
       };
 
       diff.column.removed = [oldColumn];
@@ -1105,6 +1121,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
       ];
 
@@ -1201,6 +1218,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
         {
           type: "column" as const,
@@ -1214,6 +1232,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
         {
           type: "column" as const,
@@ -1227,6 +1246,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
         {
           type: "column" as const,
@@ -1240,6 +1260,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
       ];
 
@@ -1256,6 +1277,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
         {
           type: "column" as const,
@@ -1269,6 +1291,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
         {
           type: "column" as const,
@@ -1282,6 +1305,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
         {
           type: "column" as const,
@@ -1295,6 +1319,7 @@ describe("createMigrationPlan", () => {
           default: "",
           check_constraint: null,
           autoincrement: false,
+          generated: "none" as const,
         },
       ];
 
@@ -1377,6 +1402,7 @@ describe("createMigrationPlan", () => {
             default: "'pending'",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           desired: {
             type: "column",
@@ -1390,6 +1416,7 @@ describe("createMigrationPlan", () => {
             default: "'new'",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           changes: ["default"],
         },
@@ -1406,6 +1433,7 @@ describe("createMigrationPlan", () => {
             default: "CURRENT_TIMESTAMP",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           desired: {
             type: "column",
@@ -1419,6 +1447,7 @@ describe("createMigrationPlan", () => {
             default: "datetime('now')",
             check_constraint: null,
             autoincrement: false,
+            generated: "none" as const,
           },
           changes: ["default"],
         },

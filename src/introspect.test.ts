@@ -36,6 +36,7 @@ describe("introspect", () => {
                   default: "",
                   check_constraint: null,
                   autoincrement: false,
+                  generated: "none",
                 },
               ],
               indices: [],

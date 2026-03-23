@@ -50,7 +50,7 @@ select
             'nullable',
             (
               case
-                when p."notnull" = 0 AND NOT (EXISTS(SELECT 1 FROM pragma_table_info(sch.name) WHERE pk > 0 AND name = p.name)) then 'true'
+                when p."notnull" = 0 AND NOT (EXISTS(SELECT 1 FROM pragma_table_xinfo(sch.name) WHERE pk > 0 AND name = p.name)) then 'true'
                 else 'false'
               end
             ),
@@ -99,12 +99,20 @@ select
             'check_constraint',
             null,
             'autoincrement',
-            'false'
+            'false',
+            'generated',
+            case p.hidden
+              when 2 then 'virtual'
+              when 3 then 'stored'
+              else 'none'
+            end
           )
         )
       from
         sqlite_schema sch
-        join pragma_table_info (sch.name) p on sch.type = 'table'
+        join pragma_table_xinfo (sch.name) p on sch.type = 'table'
+      and
+        p.hidden != 1
       where
         sch.name not like 'sqlite_%'
       and

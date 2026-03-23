@@ -53,6 +53,11 @@ function hasColumnLevelDifferences(current: Column, desired: Column) {
     changes.push("autoincrement");
   }
 
+  // Check for generated column differences
+  if (current.generated !== desired.generated) {
+    changes.push("generated");
+  }
+
   if (current.precision === null && desired.precision !== null) {
     changes.push("precision");
   } else if (current.precision !== null && desired.precision === null) {
