@@ -1,6 +1,5 @@
 import { basename, resolve } from "node:path";
 import { glob } from "glob";
-import type { TestDriver } from "./test-driver";
 
 export interface TestCase {
   filename: string;
@@ -8,7 +7,6 @@ export interface TestCase {
   exclusive?: boolean;
   current: string;
   next: string;
-  verify: (driver: TestDriver) => Promise<void>;
 }
 
 export async function loadTestCases(): Promise<TestCase[]> {
@@ -31,17 +29,12 @@ export async function loadTestCases(): Promise<TestCase[]> {
       throw new Error(`Test case ${file} has a missing or invalid next`);
     }
 
-    if (typeof module.verify !== "function") {
-      throw new Error(`Test case ${file} has a missing or invalid verify`);
-    }
-
     testCases.push({
       filename: basename(file),
       description: module.description,
       exclusive: module.exclusive,
       current: module.current,
       next: module.next,
-      verify: module.verify,
     });
   }
 
