@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getDriver } from "~/driver";
 import { migrate } from "~/migrate";
-import { getBetterSqlite3Database, getLibsqlClient } from "~/sqlite";
+import { getBetterSqlite3Database, getLibsqlClient, getNodeSqliteDatabase } from "~/sqlite";
 import type { SQLite } from "~/sqlite";
 import { type TestCase, loadTestCases } from "./load-test-cases";
 
@@ -9,6 +9,7 @@ describe("sqlrite integration tests", () => {
   describe.each([
     ["libsql", getLibsqlClient],
     ["better-sqlite3", getBetterSqlite3Database],
+    ["node:sqlite", getNodeSqliteDatabase],
   ])("using %s", async (clientName, getClient) => {
     const testCases: TestCase[] = await loadTestCases();
 

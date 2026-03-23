@@ -1,11 +1,14 @@
+import type { DatabaseSync } from "node:sqlite";
 import type { Client } from "@libsql/client";
 import type { Database } from "better-sqlite3";
 import {
   type SQLite,
   getBetterSqlite3Database,
   getLibsqlClient,
+  getNodeSqliteDatabase,
   isBetterSqlite3Database,
   isLibsqlClient,
+  isNodeSqliteDatabase,
 } from "./sqlite";
 import { type Result, isTesting, result } from "./utils";
 
@@ -67,13 +70,45 @@ const getBetterSqlite3Driver: DriverFactory<Database> = (client: Database) => {
   return { execute, query, migrate };
 };
 
-export type DriverType = "sqlite" | "libsql";
+const getNodeSqliteDriver: DriverFactory<DatabaseSync> = (client: DatabaseSync) => {
+  const query = async <T>(sql: string) => {
+    return client.prepare(sql).all() as T[];
+  };
+
+  const execute = async (sql: string) => {
+    client.exec(sql);
+  };
+
+  const migrate = async (sql: string[]) => {
+    try {
+      client.exec("PRAGMA foreign_keys = OFF");
+      client.exec("BEGIN DEFERRED");
+      for (const stmt of sql) client.prepare(stmt).run();
+      client.exec("COMMIT");
+      client.exec("PRAGMA foreign_keys = ON");
+      return result();
+    } catch (err) {
+      try {
+        client.exec("ROLLBACK");
+      } catch {
+        // ignore rollback errors
+      }
+      !isTesting() && console.error(err);
+      return result(err);
+    }
+  };
+  return { execute, query, migrate };
+};
+
+export type DriverType = "sqlite" | "libsql" | "node-sqlite";
 export const getDriverType: (client: SQLite) => DriverType = (client: SQLite) => {
   switch (true) {
     case isLibsqlClient(client):
       return "libsql";
     case isBetterSqlite3Database(client):
       return "sqlite";
+    case isNodeSqliteDatabase(client):
+      return "node-sqlite";
   }
   throw new TypeError("Unsupported client");
 };
@@ -84,6 +119,8 @@ export const getDriver: DriverFactory<SQLite> = (client: SQLite) => {
       return getLibsqlDriver(client);
     case isBetterSqlite3Database(client):
       return getBetterSqlite3Driver(client);
+    case isNodeSqliteDatabase(client):
+      return getNodeSqliteDriver(client);
   }
   throw new TypeError("Unsupported client");
 };
@@ -97,6 +134,11 @@ export const getNextDriver = async (client: SQLite, ddl: string) => {
     }
     case isBetterSqlite3Database(client): {
       const driver = getBetterSqlite3Driver(await getBetterSqlite3Database());
+      await driver.execute(ddl);
+      return driver;
+    }
+    case isNodeSqliteDatabase(client): {
+      const driver = getNodeSqliteDriver(await getNodeSqliteDatabase());
       await driver.execute(ddl);
       return driver;
     }
