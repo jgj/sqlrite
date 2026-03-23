@@ -17,13 +17,7 @@ export function compareIndices(current: Index[], desired: Index[]): Diff<Index> 
       continue;
     }
 
-    const changes: (keyof Index)[] = [];
-    for (const key of Object.keys(index) as (keyof Index)[]) {
-      if (index[key] !== existing[key]) {
-        changes.push(key);
-      }
-    }
-
+    const changes = getIndexChanges(existing, index);
     if (changes.length > 0) {
       modified.push({
         current: existing,
@@ -40,4 +34,34 @@ export function compareIndices(current: Index[], desired: Index[]): Diff<Index> 
   }
 
   return { added, removed, modified };
+}
+
+function getIndexChanges(current: Index, desired: Index): (keyof Index)[] {
+  const changes: (keyof Index)[] = [];
+
+  if (current.table !== desired.table) changes.push("table");
+  if (current.unique !== desired.unique) changes.push("unique");
+
+  // Compare columns arrays by value, not reference
+  if (
+    current.columns.length !== desired.columns.length ||
+    current.columns.some((col, i) => col !== desired.columns[i])
+  ) {
+    changes.push("columns");
+  }
+
+  // Compare SQL with normalization to handle whitespace/quoting differences
+  if (normalizeSql(current.sql) !== normalizeSql(desired.sql)) {
+    changes.push("sql");
+  }
+
+  return changes;
+}
+
+function normalizeSql(sql: string | null): string | null {
+  if (sql === null) return null;
+  return sql
+    .replace(/"([a-zA-Z_][a-zA-Z0-9_]*)"/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
 }

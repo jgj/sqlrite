@@ -17,13 +17,7 @@ export function compareViews(current: View[], desired: View[]): Diff<View> {
       continue;
     }
 
-    const changes: (keyof View)[] = [];
-    for (const key of Object.keys(view) as (keyof View)[]) {
-      if (view[key] !== existing[key]) {
-        changes.push(key);
-      }
-    }
-
+    const changes = getViewChanges(existing, view);
     if (changes.length > 0) {
       modified.push({
         current: existing,
@@ -40,4 +34,30 @@ export function compareViews(current: View[], desired: View[]): Diff<View> {
   }
 
   return { added, removed, modified };
+}
+
+function getViewChanges(current: View, desired: View): (keyof View)[] {
+  const changes: (keyof View)[] = [];
+
+  // Compare SQL with normalization
+  if (normalizeSql(current.sql) !== normalizeSql(desired.sql)) {
+    changes.push("sql");
+  }
+
+  // Compare tables arrays by value
+  if (
+    current.tables.length !== desired.tables.length ||
+    current.tables.some((t, i) => t !== desired.tables[i])
+  ) {
+    changes.push("tables");
+  }
+
+  return changes;
+}
+
+function normalizeSql(sql: string): string {
+  return sql
+    .replace(/"([a-zA-Z_][a-zA-Z0-9_]*)"/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
 }
