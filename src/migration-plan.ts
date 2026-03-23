@@ -17,22 +17,14 @@ export function createMigrationPlan(diff: SchemaDiff): MigrationPlan {
       - "add column"
       - "drop column"
 
-    However, applications can make other arbitrary changes 
-    to the format of a table using a 12-step sequence of operations.
+    For all other schema changes, we need to recreate the table.
   */
 
   const [tableCreates, tableDrops, tableRenames] = getTableRenames(diff);
 
+  // Get all tables that need to be recreated
   const tableRecreates = getTableRecreates(diff);
   const ignore = new Set(tableRecreates.map((t) => t.target.name));
-
-  /*
-    Some changes that do not affect the on-disk content in any way
-    can be performed using a simpler operation than a full table recreate:
-      - removing CHECK or FOREIGN KEY or NOT NULL constraints
-      - adding, removing, or changing default values on a column
-  */
-  const tableSchemaRewrites = getTableSchemaRewrites(diff, ignore);
 
   const columnRenames = getColumnRenames(diff, ignore);
 
@@ -61,7 +53,6 @@ export function createMigrationPlan(diff: SchemaDiff): MigrationPlan {
     ...indexDrops, // Drop indexes before modifying their tables
 
     ...tableRecreates, // Recreate tables (involves dropping and recreating)
-    ...tableSchemaRewrites, // Rewrite table schemas
     ...tableRenames, // Rename tables
     ...tableDrops, // Drop tables that aren't being recreated
     ...tableCreates, // Create new tables
@@ -143,6 +134,9 @@ function getTableRecreates(diff: SchemaDiff): RecreateOperation[] {
   // Check for index changes that might require table recreation
   checkIndicesForRecreation(diff, tablesRequiringRecreation);
 
+  // Check for tables that would have previously been rewritten
+  checkTablesForConstraintChanges(diff, tablesRequiringRecreation);
+
   // Generate RecreateOperations for identified tables
   for (const tableName of tablesRequiringRecreation) {
     const modifiedTable = modifiedTables.get(tableName);
@@ -161,9 +155,6 @@ function getTableRecreates(diff: SchemaDiff): RecreateOperation[] {
 function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: Set<string>): void {
   // Group columns by table for easier analysis
   const columnsByTable = new Map<string, { current: Column[]; desired: Column[] }>();
-
-  // Create map of tables to their full column lists
-  const tableColumns = new Map<string, Column[]>();
 
   // Initialize the map with tables from modified columns
   for (const { current } of diff.column.modified) {
@@ -220,6 +211,7 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
         }
 
         // Change from NULL to NOT NULL requires recreation
+        // Change from NOT NULL to NULL is handled directly with ALTER TABLE
         if (
           changes.includes("nullable") &&
           modification.current.nullable &&
@@ -240,7 +232,7 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
           tablesRequiringRecreation.add(tableName);
           break;
         }
-        
+
         // AUTOINCREMENT changes require recreation
         if (changes.includes("autoincrement")) {
           tablesRequiringRecreation.add(tableName);
@@ -320,52 +312,69 @@ function checkIndicesForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
   }
 }
 
-function getTableSchemaRewrites(diff: SchemaDiff, tablesToIgnore: Set<string>) {
-  const result = new Array<MigrationOperation>();
-  const tablesToRewrite = new Set<string>();
-
-  // Identify tables with DEFAULT value changes or NOT NULL constraint removals
+function checkTablesForConstraintChanges(
+  diff: SchemaDiff,
+  tablesRequiringRecreation: Set<string>,
+): void {
+  // Identify tables with DEFAULT value changes or NOT NULL constraint changes
   for (const { current, desired, changes } of diff.column.modified) {
     // Skip tables already marked for recreation
-    if (tablesToIgnore.has(current.table)) continue;
+    if (tablesRequiringRecreation.has(current.table)) continue;
 
-    // Default value changes
+    // Default value changes require recreation
     if (changes.includes("default")) {
-      tablesToRewrite.add(current.table);
+      tablesRequiringRecreation.add(current.table);
     }
 
-    // NOT NULL constraint removals (nullable changing from false to true)
+    // NOT NULL constraint removal (NOT NULL → NULL) requires recreation
+    // SQLite has no ALTER COLUMN — this can only be done via table recreation
     if (changes.includes("nullable") && !current.nullable && desired.nullable) {
-      tablesToRewrite.add(current.table);
+      tablesRequiringRecreation.add(current.table);
     }
   }
 
   // Identify tables with FOREIGN KEY constraint removals
   for (const fk of diff.foreign_key.removed) {
     // Skip tables already marked for recreation
-    if (tablesToIgnore.has(fk.table)) continue;
+    if (tablesRequiringRecreation.has(fk.table)) continue;
 
-    tablesToRewrite.add(fk.table);
+    tablesRequiringRecreation.add(fk.table);
   }
 
-  // TODO: Check for removal of CHECK constraints
-  // This would require analyzing the table SQL to identify removed CHECK constraints
+  // Identify tables with FK on_update/on_delete changes (also requires recreation)
+  for (const { current, changes } of diff.foreign_key.modified) {
+    if (tablesRequiringRecreation.has(current.table)) continue;
 
-  // Create rewrite operations for the identified tables
-  for (const tableName of tablesToRewrite) {
-    // Find the current and desired table definitions
-    const modifiedTable = diff.table.modified.find((mod) => mod.current.name === tableName);
-
-    if (modifiedTable) {
-      result.push({
-        type: "rewrite",
-        current: modifiedTable.current,
-        target: modifiedTable.desired,
-      });
+    if (changes.includes("on_update") || changes.includes("on_delete")) {
+      tablesRequiringRecreation.add(current.table);
     }
   }
 
-  return result;
+  // Catch remaining constraint changes (table-level CHECK, etc.) by comparing SQL
+  // but only for tables whose SQL difference is NOT already explained by
+  // column adds, drops, or renames
+  for (const { current, desired } of diff.table.modified) {
+    if (tablesRequiringRecreation.has(current.name)) continue;
+    if (current.sql === desired.sql) continue;
+
+    // If this table has column adds, drops, or renames, those explain the SQL difference
+    if (tableHasColumnStructureChanges(current.name, diff)) continue;
+
+    // Remaining SQL differences are constraint-level changes requiring recreation
+    tablesRequiringRecreation.add(current.name);
+  }
+}
+
+// Check if a table's SQL difference is explained by column-level operations
+// (adds, drops, renames) that are handled via ALTER TABLE
+function tableHasColumnStructureChanges(tableName: string, diff: SchemaDiff): boolean {
+  const hasAdds = diff.column.added.some((col) => col.table === tableName);
+  const hasDrops = diff.column.removed.some((col) => col.table === tableName);
+  const hasRenames =
+    diff.column.added.some((col) => col.table === tableName) &&
+    diff.column.removed.some((col) => col.table === tableName);
+
+  return hasAdds || hasDrops || hasRenames;
 }
 
 function getColumnRenames(
@@ -457,6 +466,7 @@ function getColumnAdds(
   tablesToIgnore: Set<string>,
   renamedColumns: Set<string> = new Set(),
 ): CreateOperation<Column>[] {
+  // Add columns are supported directly in SQLite
   return diff.column.added
     .filter(
       (column) =>
@@ -475,6 +485,7 @@ function getColumnDrops(
   tablesToIgnore: Set<string>,
   renamedColumns: Set<string> = new Set(),
 ): DropOperation<Column>[] {
+  // Drop columns are supported directly in SQLite as of version 3.35.0
   return diff.column.removed
     .filter(
       (column) =>

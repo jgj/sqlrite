@@ -72,28 +72,3 @@ Copy data
 Drop old table
 ↑
 Incorrect
-
-
-The 12-step generalized ALTER TABLE procedure above will work even if the schema change causes the information stored in the table to change. So the full 12-step procedure above is appropriate for dropping a column, changing the order of columns, adding or removing a UNIQUE constraint or PRIMARY KEY, adding CHECK or FOREIGN KEY or NOT NULL constraints, or changing the datatype for a column, for example. However, a simpler and faster procedure can optionally be used for some changes that do no affect the on-disk content in any way. The following simpler procedure is appropriate for removing CHECK or FOREIGN KEY or NOT NULL constraints, or adding, removing, or changing default values on a column.
-
-Start a transaction.
-
-Run PRAGMA schema_version to determine the current schema version number. This number will be needed for step 6 below.
-
-Activate schema editing using PRAGMA writable_schema=ON.
-
-Run an UPDATE statement to change the definition of table X in the sqlite_schema table: UPDATE sqlite_schema SET sql=... WHERE type='table' AND name='X';
-
-Caution: Making a change to the sqlite_schema table like this will render the database corrupt and unreadable if the change contains a syntax error. It is suggested that careful testing of the UPDATE statement be done on a separate blank database prior to using it on a database containing important data.
-
-If the change to table X also affects other tables or indexes or triggers are views within schema, then run UPDATE statements to modify those other tables indexes and views too. For example, if the name of a column changes, all FOREIGN KEY constraints, triggers, indexes, and views that refer to that column must be modified.
-
-Caution: Once again, making changes to the sqlite_schema table like this will render the database corrupt and unreadable if the change contains an error. Carefully test this entire procedure on a separate test database prior to using it on a database containing important data and/or make backup copies of important databases prior to running this procedure.
-
-Increment the schema version number using PRAGMA schema_version=X where X is one more than the old schema version number found in step 2 above.
-
-Disable schema editing using PRAGMA writable_schema=OFF.
-
-(Optional) Run PRAGMA integrity_check to verify that the schema changes did not damage the database.
-
-Commit the transaction started on step 1 above.

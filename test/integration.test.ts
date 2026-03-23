@@ -35,7 +35,9 @@ describe("sqlrite integration tests", () => {
       it("applies migration without error", async () => {
         const res = await migrate(client, next);
         expect(Array.isArray(res.statements)).toBe(true);
-        expect(res.success, `\nGenerated Statements:\n\t${res.statements.join("\n\t")}\n`).toBe(true);
+        expect(res.success, `\nGenerated Statements:\n\t${res.statements.join("\n\t")}\n`).toBe(
+          true,
+        );
         expect(res.err).toBeUndefined();
       });
 

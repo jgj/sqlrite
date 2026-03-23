@@ -460,7 +460,7 @@ describe("createMigrationPlan", () => {
       expect(recreateOp?.current.name).toBe("orders");
     });
 
-    it("should use simple rewrite for foreign key removal", () => {
+    it("should use simple recreate for foreign key removal", () => {
       const diff = createEmptySchemaDiff();
 
       // Table with foreign key to be removed
@@ -505,10 +505,10 @@ describe("createMigrationPlan", () => {
 
       const plan = createMigrationPlan(diff);
 
-      expect(plan.some((op) => op.type === "rewrite")).toBeTruthy();
-      const rewriteOp = plan.find((op) => op.type === "rewrite");
-      expect(rewriteOp?.current.name).toBe("orders");
-      expect(rewriteOp?.type).toBe("rewrite"); // Not recreate, just rewrite
+      expect(plan.some((op) => op.type === "recreate")).toBeTruthy();
+      const recreateOp = plan.find((op) => op.type === "recreate");
+      expect(recreateOp?.current.name).toBe("orders");
+      expect(recreateOp?.type).toBe("recreate"); // Simple recreate
     });
   });
 
@@ -670,7 +670,7 @@ describe("createMigrationPlan", () => {
   });
 
   describe("Complex scenarios", () => {
-    it("should handle default value changes with a rewrite operation", () => {
+    it("should handle default value changes with a recreate operation", () => {
       const diff = createEmptySchemaDiff();
 
       // Table definition
@@ -725,15 +725,14 @@ describe("createMigrationPlan", () => {
 
       const plan = createMigrationPlan(diff);
 
-      // Should use a rewrite operation, not a recreate
-      expect(plan.some((op) => op.type === "rewrite")).toBeTruthy();
-      expect(plan.every((op) => op.type !== "recreate")).toBeTruthy();
+      // Should use a recreate operation
+      expect(plan.some((op) => op.type === "recreate")).toBeTruthy();
 
-      const rewriteOp = plan.find((op) => op.type === "rewrite");
-      expect(rewriteOp?.current.name).toBe("users");
+      const recreateOp = plan.find((op) => op.type === "recreate");
+      expect(recreateOp?.current.name).toBe("users");
     });
 
-    it("should handle NOT NULL constraint removal with a rewrite operation", () => {
+    it("should handle NOT NULL constraint removal with a recreate operation", () => {
       const diff = createEmptySchemaDiff();
 
       // Table definition
@@ -788,12 +787,11 @@ describe("createMigrationPlan", () => {
 
       const plan = createMigrationPlan(diff);
 
-      // Should use a rewrite operation, not a recreate
-      expect(plan.some((op) => op.type === "rewrite")).toBeTruthy();
-      expect(plan.every((op) => op.type !== "recreate")).toBeTruthy();
+      // Should use a recreate operation
+      expect(plan.some((op) => op.type === "recreate")).toBeTruthy();
 
-      const rewriteOp = plan.find((op) => op.type === "rewrite");
-      expect(rewriteOp?.current.name).toBe("users");
+      const recreateOp = plan.find((op) => op.type === "recreate");
+      expect(recreateOp?.current.name).toBe("users");
     });
 
     it("should handle multiple operations while respecting table recreation precedence", () => {
@@ -1335,7 +1333,7 @@ describe("createMigrationPlan", () => {
       expect(columnOps.length).toBe(0);
     });
 
-    it("should use rewrite operation when multiple columns have default value changes", () => {
+    it("should use recreate operation when multiple columns have default value changes", () => {
       const diff = createEmptySchemaDiff();
 
       // Define table with original default values
@@ -1428,19 +1426,17 @@ describe("createMigrationPlan", () => {
 
       const plan = createMigrationPlan(diff);
 
-      // Should use a rewrite operation, not a recreate
-      const rewriteOps = plan.filter((op) => op.type === "rewrite");
+      // Should use a recreate operation
       const recreateOps = plan.filter((op) => op.type === "recreate");
 
-      expect(recreateOps.length).toBe(0); // No recreate
-      expect(rewriteOps.length).toBe(1); // Just one rewrite
-      expect(rewriteOps[0].current.name).toBe("events");
-      expect(rewriteOps[0].target.name).toBe("events");
+      expect(recreateOps.length).toBe(1); // Just one recreate
+      expect(recreateOps[0].current.name).toBe("events");
+      expect(recreateOps[0].target.name).toBe("events");
 
       // No separate column operations
       const columnOps = plan.filter(
         (op) =>
-          op.type !== "rewrite" &&
+          op.type !== "recreate" &&
           ((op.target && "table" in op.target) || (op.current && "table" in op.current)),
       );
       expect(columnOps.length).toBe(0);

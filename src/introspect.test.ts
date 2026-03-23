@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getDriver } from "./driver";
 import type { Driver } from "./driver";
 import { introspect } from "./introspect";
-import { type SQLite, getBetterSqlite3Database, getLibsqlClient } from "./sqlite";
 import type { IntrospectionResultInput } from "./introspection-result";
+import { type SQLite, getBetterSqlite3Database, getLibsqlClient } from "./sqlite";
 
 describe("introspect", () => {
   // Basic unit test with a mock driver
@@ -431,7 +431,7 @@ describe("introspect", () => {
         "CHECK (status IN ('available', 'discontinued', 'out_of_stock'))",
       );
     });
-    
+
     it("should detect AUTOINCREMENT on primary key columns", async () => {
       await executeStatements(`
         CREATE TABLE products (
@@ -458,17 +458,23 @@ describe("introspect", () => {
       const result = await introspect(driver);
 
       // Check products table
-      const productsIdColumn = result.columns.find(c => c.name === "id" && c.table === "products");
+      const productsIdColumn = result.columns.find(
+        (c) => c.name === "id" && c.table === "products",
+      );
       expect(productsIdColumn).toBeDefined();
       expect(productsIdColumn?.autoincrement).toBe(true);
-      
+
       // Check customers table (no autoincrement)
-      const customersIdColumn = result.columns.find(c => c.name === "customer_id" && c.table === "customers");
+      const customersIdColumn = result.columns.find(
+        (c) => c.name === "customer_id" && c.table === "customers",
+      );
       expect(customersIdColumn).toBeDefined();
       expect(customersIdColumn?.autoincrement).toBe(false);
-      
+
       // Check orders table
-      const ordersIdColumn = result.columns.find(c => c.name === "order_id" && c.table === "orders");
+      const ordersIdColumn = result.columns.find(
+        (c) => c.name === "order_id" && c.table === "orders",
+      );
       expect(ordersIdColumn).toBeDefined();
       expect(ordersIdColumn?.autoincrement).toBe(true);
     });
