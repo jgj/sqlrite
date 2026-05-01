@@ -1,4 +1,4 @@
-import { SQL, StringChunk } from "drizzle-orm";
+import { SQL, StringChunk, is } from "drizzle-orm";
 import { type SQLiteTableWithColumns, getTableConfig } from "drizzle-orm/sqlite-core";
 
 /**
@@ -139,8 +139,8 @@ function generateCreateIndex(idx: IndexConfig, tableName: string): string {
   const unique = idxConfig.unique ? "UNIQUE " : "";
   const cols = idxConfig.columns
     .map((c) => {
+      if (is(c, SQL)) return serializeSQL(c);
       if ("name" in c && typeof c.name === "string") return quoteId(c.name);
-      if (c instanceof SQL) return serializeSQL(c);
       return String(c);
     })
     .join(", ");
@@ -155,7 +155,7 @@ function generateCreateIndex(idx: IndexConfig, tableName: string): string {
 }
 
 function serializeDefault(value: unknown): string {
-  if (value instanceof SQL) {
+  if (is(value, SQL)) {
     return serializeSQL(value);
   }
   if (typeof value === "string") {
@@ -176,10 +176,11 @@ function serializeDefault(value: unknown): string {
 function serializeSQL(s: SQL): string {
   const chunks: string[] = [];
   for (const chunk of s.queryChunks) {
-    if (chunk instanceof StringChunk) {
+    if (is(chunk, StringChunk)) {
       chunks.push(chunk.value.join(""));
+    } else if (is(chunk, SQL)) {
+      chunks.push(serializeSQL(chunk));
     } else if (chunk && typeof chunk === "object" && "name" in chunk) {
-      // Column reference
       chunks.push(quoteId((chunk as { name: string }).name));
     } else {
       chunks.push(String(chunk));

@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "description": "declaratively manage sqlite database schema",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./drizzle": "./src/drizzle.ts"
   },
   "scripts": {
     "check": "biome check --fix --unsafe",
