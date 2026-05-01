@@ -13,11 +13,7 @@
     "strict": true,
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
-    "noEmit": true,
-    "paths": {
-      "~/*": ["./src/*"],
-      "@/*": ["./test/*"]
-    }
+    "noEmit": true
   },
   "include": ["src", "test"],
   "exclude": ["node_modules"]

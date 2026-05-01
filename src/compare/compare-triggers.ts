@@ -1,5 +1,5 @@
-import type { Trigger } from "~/introspection-result";
-import { toMapByName } from "~/utils";
+import type { Trigger } from "../introspection-result";
+import { toMapByName } from "../utils";
 import type { Diff, Modified } from "./types";
 
 export function compareTriggers(current: Trigger[], desired: Trigger[]): Diff<Trigger> {

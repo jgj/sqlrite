@@ -11,11 +11,11 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getDriver } from "~/driver";
-import { fromDrizzle } from "~/drizzle";
-import { migrate } from "~/migrate";
-import { getLibsqlClient, getNodeSqliteDatabase } from "~/sqlite";
-import type { SQLite } from "~/sqlite";
+import { getDriver } from "../src/driver";
+import { fromDrizzle } from "../src/drizzle";
+import { migrate } from "../src/migrate";
+import { getLibsqlClient, getNodeSqliteDatabase } from "../src/sqlite";
+import type { SQLite } from "../src/sqlite";
 
 describe("fromDrizzle", () => {
   it("generates valid DDL from a basic table", () => {

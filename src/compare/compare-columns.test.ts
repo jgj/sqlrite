@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Column } from "~/introspection-result";
+import type { Column } from "../introspection-result";
 import { compareColumns } from "./compare-columns";
 
 const baseColumn: Column = {

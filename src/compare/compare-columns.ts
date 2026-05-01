@@ -1,5 +1,5 @@
-import type { Column } from "~/introspection-result";
-import { getColName, toMapBy } from "~/utils";
+import type { Column } from "../introspection-result";
+import { getColName, toMapBy } from "../utils";
 import type { Diff, Modified } from "./types";
 
 export function compareColumns(current: Column[], desired: Column[]): Diff<Column> {

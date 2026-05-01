@@ -2,7 +2,9 @@
   "name": "sqlrite",
   "version": "0.1.0",
   "description": "declaratively manage sqlite database schema",
-  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "check": "biome check --fix --unsafe",
     "check:run": "biome check",
@@ -22,7 +24,6 @@
     "glob": "^11.0.1",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
-    "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.1.1"
   },
   "peerDependencies": {
@@ -31,8 +32,14 @@
     "drizzle-orm": "^0.45.0"
   },
   "peerDependenciesMeta": {
-    "@libsql/client": { "optional": true },
-    "better-sqlite3": { "optional": true },
-    "drizzle-orm": { "optional": true }
+    "@libsql/client": {
+      "optional": true
+    },
+    "better-sqlite3": {
+      "optional": true
+    },
+    "drizzle-orm": {
+      "optional": true
+    }
   }
 }

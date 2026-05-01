@@ -1,5 +1,5 @@
-import type { Index } from "~/introspection-result";
-import { toMapByName } from "~/utils";
+import type { Index } from "../introspection-result";
+import { toMapByName } from "../utils";
 import type { Diff, Modified } from "./types";
 
 export function compareIndices(current: Index[], desired: Index[]): Diff<Index> {

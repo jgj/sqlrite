@@ -1,5 +1,5 @@
-import type { View } from "~/introspection-result";
-import { toMapByName } from "~/utils";
+import type { View } from "../introspection-result";
+import { toMapByName } from "../utils";
 import type { Diff, Modified } from "./types";
 
 export function compareViews(current: View[], desired: View[]): Diff<View> {

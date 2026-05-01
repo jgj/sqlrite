@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Trigger } from "~/introspection-result";
+import type { Trigger } from "../introspection-result";
 import { compareTriggers } from "./compare-triggers";
 
 const baseTrigger: Trigger = {

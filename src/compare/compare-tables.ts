@@ -1,5 +1,5 @@
-import type { Table } from "~/introspection-result";
-import { toMapByName } from "~/utils";
+import type { Table } from "../introspection-result";
+import { toMapByName } from "../utils";
 import type { Diff, Modified } from "./types";
 
 export function compareTables(current: Table[], desired: Table[]): Diff<Table> {
