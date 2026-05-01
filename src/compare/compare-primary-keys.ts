@@ -1,5 +1,5 @@
-import type { PrimaryKey } from "~/introspection-result";
-import { toMap } from "~/utils";
+import type { PrimaryKey } from "../introspection-result";
+import { toMap } from "../utils";
 import type { Diff, Modified } from "./types";
 
 export function comparePrimaryKeys(current: PrimaryKey[], desired: PrimaryKey[]): Diff<PrimaryKey> {

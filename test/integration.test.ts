@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getDriver } from "~/driver";
-import { migrate } from "~/migrate";
-import { getBetterSqlite3Database, getLibsqlClient, getNodeSqliteDatabase } from "~/sqlite";
-import type { SQLite } from "~/sqlite";
+import { getDriver } from "../src/driver";
+import { migrate } from "../src/migrate";
+import { getBetterSqlite3Database, getLibsqlClient, getNodeSqliteDatabase } from "../src/sqlite";
+import type { SQLite } from "../src/sqlite";
 import { type TestCase, loadTestCases } from "./load-test-cases";
 
 describe("sqlrite integration tests", () => {

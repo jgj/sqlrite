@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Table } from "~/introspection-result";
+import type { Table } from "../introspection-result";
 import { compareTables } from "./compare-tables";
 
 describe("compareTables", () => {

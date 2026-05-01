@@ -9,7 +9,7 @@ import type {
   Table,
   Trigger,
   View,
-} from "~/introspection-result";
+} from "../introspection-result";
 
 export type Modified<T extends IntrospectionObject> = {
   current: T;

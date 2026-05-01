@@ -1,5 +1,5 @@
-import type { ForeignKey } from "~/introspection-result";
-import { toMapByName } from "~/utils";
+import type { ForeignKey } from "../introspection-result";
+import { toMapByName } from "../utils";
 import type { Diff, Modified } from "./types";
 
 export function compareForeignKeys(current: ForeignKey[], desired: ForeignKey[]): Diff<ForeignKey> {
