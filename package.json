@@ -20,7 +20,7 @@
     "@biomejs/biome": "^1.9.4",
     "@libsql/client": "^0.15.2",
     "@types/better-sqlite3": "^7.6.13",
-    "better-sqlite3": "^11.9.1",
+    "better-sqlite3": "^12.9.0",
     "drizzle-orm": "^0.45.1",
     "glob": "^11.0.1",
     "tsx": "^4.19.3",
