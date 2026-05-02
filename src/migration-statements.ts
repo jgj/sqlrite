@@ -15,6 +15,8 @@ export type MigrationWarning = {
 export type MigrationPreview = {
   statements: string[];
   warnings: MigrationWarning[];
+  plan: MigrationPlan;
+  diff: SchemaDiff;
 };
 
 export async function getMigrationStatements(client: SQLite, ddl: string): Promise<string[]> {
@@ -34,7 +36,7 @@ export async function getMigrationPreview(client: SQLite, ddl: string): Promise<
   const statements = generateDDL(migrationPlan, currSchema, nextSchema);
   const warnings = generateWarnings(migrationPlan, diff);
 
-  return { statements, warnings };
+  return { statements, warnings, plan: migrationPlan, diff };
 }
 
 function generateWarnings(plan: MigrationPlan, diff: SchemaDiff): MigrationWarning[] {

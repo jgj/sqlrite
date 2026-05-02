@@ -8,6 +8,11 @@ type Operation<O extends OperationType, T extends OperationTarget> = {
   target?: T;
 };
 
+export type RecreateReason = {
+  check: string;
+  detail: string;
+};
+
 export type CreateOperation<T extends OperationTarget> = Operation<"create", T> & {
   target: T;
 };
@@ -24,6 +29,7 @@ export type RenameOperation<T extends OperationTarget> = Operation<"rename", T> 
 export type RecreateOperation = Operation<"recreate", Table> & {
   current: Table;
   target: Table;
+  reasons?: RecreateReason[];
 };
 
 export type MigrationOperation =

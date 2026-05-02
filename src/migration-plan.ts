@@ -5,6 +5,7 @@ import type {
   DropOperation,
   MigrationOperation,
   RecreateOperation,
+  RecreateReason,
   RenameOperation,
 } from "./migration-operation";
 import { columnsLookLikeRename, invariant } from "./utils";
@@ -113,9 +114,25 @@ function getTableRenames(diff: SchemaDiff) {
   ] as const;
 }
 
+type RecreateReasonMap = Map<string, RecreateReason[]>;
+
+function recordRecreate(
+  reasons: RecreateReasonMap,
+  tableName: string,
+  check: string,
+  detail: string,
+): void {
+  let list = reasons.get(tableName);
+  if (!list) {
+    list = [];
+    reasons.set(tableName, list);
+  }
+  list.push({ check, detail });
+}
+
 function getTableRecreates(diff: SchemaDiff): RecreateOperation[] {
   const result = new Array<RecreateOperation>();
-  const tablesRequiringRecreation = new Set<string>();
+  const reasons: RecreateReasonMap = new Map();
 
   // Get mapping of table name to modified table objects
   const modifiedTables = new Map(
@@ -123,28 +140,29 @@ function getTableRecreates(diff: SchemaDiff): RecreateOperation[] {
   );
 
   // Check for column changes that require table recreation
-  checkColumnsForRecreation(diff, tablesRequiringRecreation);
+  checkColumnsForRecreation(diff, reasons);
 
   // Check for primary key changes that require table recreation
-  checkPrimaryKeysForRecreation(diff, tablesRequiringRecreation);
+  checkPrimaryKeysForRecreation(diff, reasons);
 
   // Check for foreign key changes that require table recreation
-  checkForeignKeysForRecreation(diff, tablesRequiringRecreation);
+  checkForeignKeysForRecreation(diff, reasons);
 
   // Check for index changes that might require table recreation
-  checkIndicesForRecreation(diff, tablesRequiringRecreation);
+  checkIndicesForRecreation(diff, reasons);
 
   // Check for tables that would have previously been rewritten
-  checkTablesForConstraintChanges(diff, tablesRequiringRecreation);
+  checkTablesForConstraintChanges(diff, reasons);
 
   // Generate RecreateOperations for identified tables
-  for (const tableName of tablesRequiringRecreation) {
+  for (const [tableName, tableReasons] of reasons) {
     const modifiedTable = modifiedTables.get(tableName);
     if (modifiedTable) {
       result.push({
         type: "recreate",
         current: modifiedTable.current,
         target: modifiedTable.desired,
+        reasons: tableReasons,
       });
     }
   }
@@ -152,7 +170,7 @@ function getTableRecreates(diff: SchemaDiff): RecreateOperation[] {
   return result;
 }
 
-function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: Set<string>): void {
+function checkColumnsForRecreation(diff: SchemaDiff, reasons: RecreateReasonMap): void {
   // Group columns by table for easier analysis
   const columnsByTable = new Map<string, { current: Column[]; desired: Column[] }>();
 
@@ -186,13 +204,23 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
 
     // SQLite requires that NOT NULL columns added via ALTER TABLE have a default value
     if (!column.nullable && (!column.default || column.default.trim() === "")) {
-      tablesRequiringRecreation.add(column.table);
+      recordRecreate(
+        reasons,
+        column.table,
+        "column.added.not_null_no_default",
+        `Added column "${column.name}" is NOT NULL without a default; ALTER TABLE ADD COLUMN cannot be used`,
+      );
     }
 
     // Generated columns require recreation — ALTER TABLE ADD COLUMN doesn't
     // include the GENERATED ALWAYS AS clause in the column definition
     if (column.generated !== "none") {
-      tablesRequiringRecreation.add(column.table);
+      recordRecreate(
+        reasons,
+        column.table,
+        "column.added.generated",
+        `Added column "${column.name}" is generated (${column.generated}); ALTER TABLE ADD COLUMN omits GENERATED clause`,
+      );
     }
   }
 
@@ -204,7 +232,12 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
       `Table '${column.table}' for column '${column.name}' is not in current schema`,
     );
     if (column.ordinal_position + 1 < table.num_cols) {
-      tablesRequiringRecreation.add(column.table);
+      recordRecreate(
+        reasons,
+        column.table,
+        "column.removed.not_last",
+        `Dropped column "${column.name}" is at ordinal ${column.ordinal_position} of ${table.num_cols}; not the last column`,
+      );
     }
   }
 
@@ -212,53 +245,84 @@ function checkColumnsForRecreation(diff: SchemaDiff, tablesRequiringRecreation: 
   for (const [tableName, { current, desired }] of columnsByTable.entries()) {
     // Check if column order has changed
     if (hasColumnOrderChanged(current, desired)) {
-      tablesRequiringRecreation.add(tableName);
+      recordRecreate(
+        reasons,
+        tableName,
+        "column.order_changed",
+        "Column ordering differs between current and desired",
+      );
       continue;
     }
 
     // Check for data type changes, nullability changes, etc.
     for (const modification of diff.column.modified) {
       if (modification.current.table === tableName) {
-        const { changes } = modification;
+        const { changes, current: c, desired: d } = modification;
 
         // Data type changes require recreation
         if (changes.includes("data_type")) {
-          tablesRequiringRecreation.add(tableName);
+          recordRecreate(
+            reasons,
+            tableName,
+            "column.modified.data_type",
+            `Column "${c.name}" data_type changed: ${c.data_type} → ${d.data_type}`,
+          );
           break;
         }
 
         // Change from NULL to NOT NULL requires recreation
         // Change from NOT NULL to NULL is handled directly with ALTER TABLE
-        if (
-          changes.includes("nullable") &&
-          modification.current.nullable &&
-          !modification.desired.nullable
-        ) {
-          tablesRequiringRecreation.add(tableName);
+        if (changes.includes("nullable") && c.nullable && !d.nullable) {
+          recordRecreate(
+            reasons,
+            tableName,
+            "column.modified.nullable_tightened",
+            `Column "${c.name}" changed from NULL to NOT NULL`,
+          );
           break;
         }
 
         // Precision or character length changes require recreation
         if (changes.includes("precision") || changes.includes("character_maximum_length")) {
-          tablesRequiringRecreation.add(tableName);
+          recordRecreate(
+            reasons,
+            tableName,
+            "column.modified.precision_or_length",
+            `Column "${c.name}" precision/length changed (changes: ${changes.join(", ")})`,
+          );
           break;
         }
 
         // Check constraint changes require recreation
         if (changes.includes("check_constraint")) {
-          tablesRequiringRecreation.add(tableName);
+          recordRecreate(
+            reasons,
+            tableName,
+            "column.modified.check_constraint",
+            `Column "${c.name}" CHECK constraint changed: ${c.check_constraint ?? "<none>"} → ${d.check_constraint ?? "<none>"}`,
+          );
           break;
         }
 
         // AUTOINCREMENT changes require recreation
         if (changes.includes("autoincrement")) {
-          tablesRequiringRecreation.add(tableName);
+          recordRecreate(
+            reasons,
+            tableName,
+            "column.modified.autoincrement",
+            `Column "${c.name}" AUTOINCREMENT changed: ${c.autoincrement} → ${d.autoincrement}`,
+          );
           break;
         }
 
         // Generated column changes require recreation
         if (changes.includes("generated")) {
-          tablesRequiringRecreation.add(tableName);
+          recordRecreate(
+            reasons,
+            tableName,
+            "column.modified.generated",
+            `Column "${c.name}" generated changed: ${c.generated} → ${d.generated}`,
+          );
           break;
         }
       }
@@ -277,99 +341,137 @@ function hasColumnOrderChanged(current: Column[], desired: Column[]): boolean {
   );
 }
 
-function checkPrimaryKeysForRecreation(
-  diff: SchemaDiff,
-  tablesRequiringRecreation: Set<string>,
-): void {
+function checkPrimaryKeysForRecreation(diff: SchemaDiff, reasons: RecreateReasonMap): void {
   // Added primary keys require recreation
   for (const pk of diff.primary_key.added) {
-    tablesRequiringRecreation.add(pk.table);
+    recordRecreate(
+      reasons,
+      pk.table,
+      "primary_key.added",
+      `Primary key added on column(s) "${pk.column}"`,
+    );
   }
 
   // Modified primary keys require recreation
-  for (const { current } of diff.primary_key.modified) {
-    tablesRequiringRecreation.add(current.table);
+  for (const { current, desired } of diff.primary_key.modified) {
+    recordRecreate(
+      reasons,
+      current.table,
+      "primary_key.modified",
+      `Primary key changed: "${current.column}" → "${desired.column}"`,
+    );
   }
 
   // Removed primary keys require recreation
   for (const pk of diff.primary_key.removed) {
-    tablesRequiringRecreation.add(pk.table);
+    recordRecreate(
+      reasons,
+      pk.table,
+      "primary_key.removed",
+      `Primary key removed from column(s) "${pk.column}"`,
+    );
   }
 }
 
-function checkForeignKeysForRecreation(
-  diff: SchemaDiff,
-  tablesRequiringRecreation: Set<string>,
-): void {
+function checkForeignKeysForRecreation(diff: SchemaDiff, reasons: RecreateReasonMap): void {
   // Adding foreign keys requires recreation
   for (const fk of diff.foreign_key.added) {
-    tablesRequiringRecreation.add(fk.table);
+    recordRecreate(
+      reasons,
+      fk.table,
+      "foreign_key.added",
+      `Foreign key added: "${fk.column}" → ${fk.referenced_table}("${fk.referenced_column}")`,
+    );
   }
 
   // Check modified foreign keys
-  for (const { current, changes } of diff.foreign_key.modified) {
+  for (const { current, desired, changes } of diff.foreign_key.modified) {
     // If we're changing anything other than dropping constraints, we need recreation
     const nonRemovalChanges = changes.filter(
       (change) => change !== "on_update" && change !== "on_delete" && change !== "definition",
     );
 
     if (nonRemovalChanges.length > 0) {
-      tablesRequiringRecreation.add(current.table);
+      recordRecreate(
+        reasons,
+        current.table,
+        "foreign_key.modified",
+        `Foreign key on "${current.column}" changed (changes: ${nonRemovalChanges.join(", ")}); current="${current.definition}", desired="${desired.definition}"`,
+      );
     }
   }
 }
 
-function checkIndicesForRecreation(diff: SchemaDiff, tablesRequiringRecreation: Set<string>): void {
+function checkIndicesForRecreation(diff: SchemaDiff, reasons: RecreateReasonMap): void {
   // Adding unique indices requires recreation
   for (const index of diff.index.added) {
     if (index.unique) {
-      tablesRequiringRecreation.add(index.table);
+      recordRecreate(
+        reasons,
+        index.table,
+        "index.added.unique",
+        `Unique index "${index.name}" added on (${index.columns.join(", ")})`,
+      );
     }
   }
 
   // Check for modified indices where uniqueness has changed
   for (const { current, desired, changes } of diff.index.modified) {
     if (changes.includes("unique") && !current.unique && desired.unique) {
-      tablesRequiringRecreation.add(current.table);
+      recordRecreate(
+        reasons,
+        current.table,
+        "index.modified.unique_added",
+        `Index "${desired.name}" gained UNIQUE constraint`,
+      );
     }
   }
 }
 
-function checkTablesForConstraintChanges(
-  diff: SchemaDiff,
-  tablesRequiringRecreation: Set<string>,
-): void {
+function checkTablesForConstraintChanges(diff: SchemaDiff, reasons: RecreateReasonMap): void {
   // Identify tables with DEFAULT value changes or NOT NULL constraint changes
   for (const { current, desired, changes } of diff.column.modified) {
-    // Skip tables already marked for recreation
-    if (tablesRequiringRecreation.has(current.table)) continue;
-
     // Default value changes require recreation
     if (changes.includes("default")) {
-      tablesRequiringRecreation.add(current.table);
+      recordRecreate(
+        reasons,
+        current.table,
+        "column.modified.default",
+        `Column "${current.name}" default changed: "${current.default}" → "${desired.default}"`,
+      );
     }
 
     // NOT NULL constraint removal (NOT NULL → NULL) requires recreation
     // SQLite has no ALTER COLUMN — this can only be done via table recreation
     if (changes.includes("nullable") && !current.nullable && desired.nullable) {
-      tablesRequiringRecreation.add(current.table);
+      recordRecreate(
+        reasons,
+        current.table,
+        "column.modified.nullable_loosened",
+        `Column "${current.name}" changed from NOT NULL to NULL`,
+      );
     }
   }
 
   // Identify tables with FOREIGN KEY constraint removals
   for (const fk of diff.foreign_key.removed) {
-    // Skip tables already marked for recreation
-    if (tablesRequiringRecreation.has(fk.table)) continue;
-
-    tablesRequiringRecreation.add(fk.table);
+    recordRecreate(
+      reasons,
+      fk.table,
+      "foreign_key.removed",
+      `Foreign key removed: "${fk.column}" → ${fk.referenced_table}("${fk.referenced_column}")`,
+    );
   }
 
   // Identify tables with FK on_update/on_delete changes (also requires recreation)
-  for (const { current, changes } of diff.foreign_key.modified) {
-    if (tablesRequiringRecreation.has(current.table)) continue;
-
+  for (const { current, desired, changes } of diff.foreign_key.modified) {
     if (changes.includes("on_update") || changes.includes("on_delete")) {
-      tablesRequiringRecreation.add(current.table);
+      recordRecreate(
+        reasons,
+        current.table,
+        "foreign_key.modified.action",
+        `Foreign key on "${current.column}" action changed: on_update ${current.on_update}→${desired.on_update}, on_delete ${current.on_delete}→${desired.on_delete}`,
+      );
     }
   }
 
@@ -377,14 +479,18 @@ function checkTablesForConstraintChanges(
   // but only for tables whose SQL difference is NOT already explained by
   // column adds, drops, or renames
   for (const { current, desired } of diff.table.modified) {
-    if (tablesRequiringRecreation.has(current.name)) continue;
     if (current.sql === desired.sql) continue;
 
     // If this table has column adds, drops, or renames, those explain the SQL difference
     if (tableHasColumnStructureChanges(current.name, diff)) continue;
 
     // Remaining SQL differences are constraint-level changes requiring recreation
-    tablesRequiringRecreation.add(current.name);
+    recordRecreate(
+      reasons,
+      current.name,
+      "table.sql_diff",
+      `Table SQL differs and no column add/drop/rename explains it.\n  current.sql:\n    ${current.sql}\n  desired.sql:\n    ${desired.sql}`,
+    );
   }
 }
 
