@@ -38,9 +38,6 @@ type ColumnConfig = TableConfig["columns"][number];
 type IndexConfig = TableConfig["indexes"][number];
 type ForeignKeyConfig = TableConfig["foreignKeys"][number];
 type CheckConfig = TableConfig["checks"][number];
-type PrimaryKeyConfig = TableConfig["primaryKeys"][number];
-type UniqueConstraintConfig = TableConfig["uniqueConstraints"][number];
-
 function generateCreateTable(config: TableConfig): string {
   const parts: string[] = [];
 

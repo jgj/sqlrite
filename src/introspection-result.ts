@@ -12,9 +12,7 @@ const numberString = type("string|number|null").pipe((val) => {
   throw new TypeError("Not a numeric string");
 });
 
-const nullString = type("'null'|null").pipe((val) => {
-  return null;
-});
+const nullString = type("'null'|null").pipe(() => null);
 
 const table = type({
   type: '"table"',
