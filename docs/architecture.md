@@ -43,6 +43,8 @@ Everything else requires **table recreation**: create temp table → copy data �
 
 The planner detects table renames (via SQL comparison minus name) and column renames (via heuristic matching of removed+added columns with compatible types).
 
+Each recreation decision is tagged with a `RecreateReason` (`{ check, detail }`) and surfaced on the corresponding `RecreateOperation.reasons`. This is the primary debugging hook when a recreation seems unexpected — each call site that adds a table to the recreate set records a check identifier (e.g. `column.order_changed`, `foreign_key.added`, `table.sql_diff`) and a detail string with before/after values, so callers can see exactly which rule fired and why.
+
 ### 4. DDL Generation (`src/generate-ddl.ts`)
 
 Converts the migration plan into executable SQL statements. The table recreation flow follows SQLite's recommended procedure:

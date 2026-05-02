@@ -1349,6 +1349,11 @@ describe("createMigrationPlan", () => {
       expect(recreateOps.length).toBe(1);
       expect(recreateOps[0].current.name).toBe("products");
 
+      // The reason for recreation should explicitly call out the column order change
+      expect(recreateOps[0].reasons).toBeDefined();
+      const checks = (recreateOps[0].reasons ?? []).map((r) => r.check);
+      expect(checks).toContain("column.order_changed");
+
       // No separate column operations since the table is being recreated
       const columnOps = plan.filter(
         (op) =>
@@ -1469,6 +1474,93 @@ describe("createMigrationPlan", () => {
           ((op.target && "table" in op.target) || (op.current && "table" in op.current)),
       );
       expect(columnOps.length).toBe(0);
+    });
+  });
+
+  describe("Recreate reasons", () => {
+    it("populates reasons for a data type change with before/after values", () => {
+      const diff = createEmptySchemaDiff();
+      const tableObj = {
+        type: "table" as const,
+        name: "users",
+        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, age INTEGER)",
+        views: [],
+        num_cols: 2,
+      };
+
+      diff.table.modified = [{ current: tableObj, desired: tableObj, changes: ["sql"] }];
+      diff.column.modified = [
+        {
+          current: {
+            type: "column",
+            name: "age",
+            table: "users",
+            data_type: "INTEGER",
+            ordinal_position: 2,
+            nullable: true,
+            character_maximum_length: null,
+            precision: null,
+            default: "",
+            check_constraint: null,
+            autoincrement: false,
+            generated: "none" as const,
+          },
+          desired: {
+            type: "column",
+            name: "age",
+            table: "users",
+            data_type: "TEXT",
+            ordinal_position: 2,
+            nullable: true,
+            character_maximum_length: null,
+            precision: null,
+            default: "",
+            check_constraint: null,
+            autoincrement: false,
+            generated: "none" as const,
+          },
+          changes: ["data_type"],
+        },
+      ];
+
+      const plan = createMigrationPlan(diff);
+      const recreate = plan.find((op) => op.type === "recreate");
+
+      expect(recreate?.reasons).toEqual([
+        expect.objectContaining({
+          check: "column.modified.data_type",
+          detail: expect.stringContaining("INTEGER"),
+        }),
+      ]);
+      expect(recreate?.reasons?.[0].detail).toContain("TEXT");
+    });
+
+    it("populates a table.sql_diff reason with both SQL strings when no structural change explains it", () => {
+      const diff = createEmptySchemaDiff();
+      const current = {
+        type: "table" as const,
+        name: "users",
+        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, CHECK (id > 0))",
+        views: [],
+        num_cols: 1,
+      };
+      const desired = {
+        type: "table" as const,
+        name: "users",
+        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, CHECK (id >= 0))",
+        views: [],
+        num_cols: 1,
+      };
+
+      diff.table.modified = [{ current, desired, changes: ["sql"] }];
+
+      const plan = createMigrationPlan(diff);
+      const recreate = plan.find((op) => op.type === "recreate");
+
+      expect(recreate?.reasons?.map((r) => r.check)).toContain("table.sql_diff");
+      const sqlDiffReason = recreate?.reasons?.find((r) => r.check === "table.sql_diff");
+      expect(sqlDiffReason?.detail).toContain("CHECK (id > 0)");
+      expect(sqlDiffReason?.detail).toContain("CHECK (id >= 0)");
     });
   });
 });

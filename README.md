@@ -23,6 +23,28 @@ await migrate(db, schema);
 const plan = await getMigration(db, schema);
 console.log(plan);
 // ["CREATE TABLE users (...)", ...]
+```
+
+### Debugging unexpected migrations
+
+If sqlrite produces a surprising migration (e.g. a full table recreation when you expected none), use `getMigrationPreview` to see *why*. Each `recreate` operation in the returned `plan` carries a `reasons` array recording which checks fired:
+
+```typescript
+import { getMigrationPreview } from 'sqlrite';
+
+const { statements, plan, diff } = await getMigrationPreview(db, schema);
+
+for (const op of plan) {
+  if (op.type === "recreate") {
+    console.log(`Recreating "${op.current.name}":`);
+    for (const r of op.reasons ?? []) {
+      console.log(`  [${r.check}] ${r.detail}`);
+    }
+  }
+}
+```
+
+Each reason has a `check` identifier (e.g. `column.modified.data_type`, `column.order_changed`, `foreign_key.added`, `table.sql_diff`) and a human-readable `detail` string with before/after values. The raw `SchemaDiff` is also exposed on `diff` for deeper inspection.
 
 ### SQLite ALTER TABLE
 
