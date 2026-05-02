@@ -328,8 +328,3 @@ function buildColumnMapping(
 
   return mapping;
 }
-
-// Helper to properly quote SQL strings
-function sqlString(sql: string): string {
-  return `'${sql.replace(/'/g, "''")}'`;
-}

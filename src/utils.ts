@@ -156,21 +156,22 @@ type ErrorResult = {
 export type Result = SuccessResult | ErrorResult;
 
 class UnknownError extends Error {
-  constructor(readonly cause: unknown) {
-    super("An unknown error occurred");
+  constructor(cause: unknown) {
+    super("An unknown error occurred", { cause });
   }
 }
 
 export class MigrationError extends Error {
-  constructor(
-    readonly statementIndex: number,
-    readonly statement: string,
-    readonly cause: Error,
-  ) {
+  readonly statementIndex: number;
+  readonly statement: string;
+  constructor(statementIndex: number, statement: string, cause: Error) {
     super(
       `Migration failed at statement ${statementIndex + 1}:\n  ${statement}\n\nCause: ${cause.message}`,
+      { cause },
     );
     this.name = "MigrationError";
+    this.statementIndex = statementIndex;
+    this.statement = statement;
   }
 }
 

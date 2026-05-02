@@ -48,7 +48,7 @@ const getBetterSqlite3Driver: DriverFactory<Database> = (client: Database) => {
     return result;
   };
 
-  const execute = async <T>(sql: string) => {
+  const execute = async (sql: string) => {
     await client.exec(sql);
   };
 
