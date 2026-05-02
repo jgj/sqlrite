@@ -2,6 +2,23 @@ import { SQL, StringChunk, is } from "drizzle-orm";
 import { type SQLiteTableWithColumns, getTableConfig } from "drizzle-orm/sqlite-core";
 
 /**
+ * Structural shape of a Drizzle SQLite table. Typed duck-style rather than
+ * as `SQLiteTable` because consumers commonly resolve a different physical
+ * copy of `drizzle-orm` (separate peer-dep envs under pnpm produce distinct
+ * nominal classes, and the `private shouldInlineParams` field on `SQL`
+ * blocks structural assignment between them). The public `_` config is
+ * stable across drizzle versions; runtime correctness relies on
+ * `getTableConfig` rejecting non-tables.
+ */
+export type DrizzleSQLiteTable = {
+  _: {
+    name: string;
+    schema: string | undefined;
+    columns: Record<string, unknown>;
+  };
+};
+
+/**
  * Generate SQL DDL from Drizzle table definitions.
  *
  * @param tables One or more Drizzle SQLite table definitions
@@ -17,12 +34,12 @@ import { type SQLiteTableWithColumns, getTableConfig } from "drizzle-orm/sqlite-
  * await migrate(db, ddl);
  * ```
  */
-// biome-ignore lint/suspicious/noExplicitAny: Drizzle table types are complex generics
-export function fromDrizzle(...tables: SQLiteTableWithColumns<any>[]): string {
+export function fromDrizzle(...tables: DrizzleSQLiteTable[]): string {
   const statements: string[] = [];
 
   for (const table of tables) {
-    const config = getTableConfig(table);
+    // biome-ignore lint/suspicious/noExplicitAny: bridge structural DrizzleSQLiteTable to our own drizzle copy's nominal type
+    const config = getTableConfig(table as unknown as SQLiteTableWithColumns<any>);
     statements.push(generateCreateTable(config));
 
     for (const idx of config.indexes) {
