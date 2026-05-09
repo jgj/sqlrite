@@ -107,7 +107,7 @@ function generateColumnDef(col: ColumnConfig): string {
 
   // DEFAULT
   if (col.default !== undefined) {
-    def += ` DEFAULT ${serializeDefault(col.default)}`;
+    def += ` DEFAULT ${serializeDefault(col.default, col)}`;
   }
 
   // UNIQUE (inline)
@@ -170,9 +170,12 @@ function generateCreateIndex(idx: IndexConfig, tableName: string): string {
   return `${stmt};`;
 }
 
-function serializeDefault(value: unknown): string {
+function serializeDefault(value: unknown, col?: ColumnConfig): string {
   if (is(value, SQL)) {
     return serializeSQL(value);
+  }
+  if (value instanceof Date && col) {
+    return serializeDefault(col.mapToDriverValue(value));
   }
   if (typeof value === "string") {
     return `'${value.replace(/'/g, "''")}'`;
