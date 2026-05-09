@@ -49,6 +49,21 @@ describe("fromDrizzle", () => {
     expect(ddl).toContain("DEFAULT 1.5");
   });
 
+  it("encodes Date defaults via the column's driver mapping", () => {
+    const series = sqliteTable("series", {
+      id: integer("id").primaryKey(),
+      fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull().default(new Date(0)),
+      fetchedAtMs: integer("fetched_at_ms", { mode: "timestamp_ms" })
+        .notNull()
+        .default(new Date(0)),
+    });
+
+    const ddl = fromDrizzle(series);
+    expect(ddl).toContain('"fetched_at" INTEGER NOT NULL DEFAULT 0');
+    expect(ddl).toContain('"fetched_at_ms" INTEGER NOT NULL DEFAULT 0');
+    expect(ddl).not.toContain("Dec");
+  });
+
   it("generates DDL with SQL default expressions", () => {
     const events = sqliteTable("events", {
       id: integer("id").primaryKey(),
