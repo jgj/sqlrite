@@ -12,6 +12,21 @@ export type MigrationWarning = {
   message: string;
 };
 
+export type MigrationOptions = {
+  /**
+   * When true, tables present in the current schema but absent from the desired
+   * schema are not dropped. Indexes, triggers, and views that depend on those
+   * tables are also left alone. Drop+create pairs that resolve to renames are
+   * still emitted as renames.
+   *
+   * Useful when adopting sqlrite on an established database where some tables
+   * intentionally aren't represented in the declared schema.
+   *
+   * @default false
+   */
+  ignoreTableDeletion?: boolean;
+};
+
 export type MigrationPreview = {
   statements: string[];
   warnings: MigrationWarning[];
@@ -19,12 +34,20 @@ export type MigrationPreview = {
   diff: SchemaDiff;
 };
 
-export async function getMigrationStatements(client: SQLite, ddl: string): Promise<string[]> {
-  const preview = await getMigrationPreview(client, ddl);
+export async function getMigrationStatements(
+  client: SQLite,
+  ddl: string,
+  options: MigrationOptions = {},
+): Promise<string[]> {
+  const preview = await getMigrationPreview(client, ddl, options);
   return preview.statements;
 }
 
-export async function getMigrationPreview(client: SQLite, ddl: string): Promise<MigrationPreview> {
+export async function getMigrationPreview(
+  client: SQLite,
+  ddl: string,
+  options: MigrationOptions = {},
+): Promise<MigrationPreview> {
   const currDriver = getDriver(client);
   const currSchema = await introspect(currDriver);
 
@@ -32,7 +55,7 @@ export async function getMigrationPreview(client: SQLite, ddl: string): Promise<
   const nextSchema = await introspect(nextDriver);
 
   const diff = compareSchema(currSchema, nextSchema);
-  const migrationPlan = createMigrationPlan(diff);
+  const migrationPlan = createMigrationPlan(diff, options);
   const statements = generateDDL(migrationPlan, currSchema, nextSchema);
   const warnings = generateWarnings(migrationPlan, diff);
 
