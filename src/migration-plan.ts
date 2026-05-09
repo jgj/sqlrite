@@ -8,9 +8,13 @@ import type {
   RecreateReason,
   RenameOperation,
 } from "./migration-operation";
+import type { MigrationOptions } from "./migration-statements";
 import { columnsLookLikeRename, invariant } from "./utils";
 
-export function createMigrationPlan(diff: SchemaDiff): MigrationPlan {
+export function createMigrationPlan(
+  diff: SchemaDiff,
+  options: MigrationOptions = {},
+): MigrationPlan {
   /*
     The only schema altering commands directly supported by SQLite are:
       - "rename table"
@@ -21,11 +25,22 @@ export function createMigrationPlan(diff: SchemaDiff): MigrationPlan {
     For all other schema changes, we need to recreate the table.
   */
 
-  const [tableCreates, tableDrops, tableRenames] = getTableRenames(diff);
+  let [tableCreates, tableDrops, tableRenames] = getTableRenames(diff);
 
   // Get all tables that need to be recreated
   const tableRecreates = getTableRecreates(diff);
   const ignore = new Set(tableRecreates.map((t) => t.target.name));
+
+  // ignoreTableDeletion: suppress drop operations and treat these tables as
+  // ignored so dependent indexes/triggers/views aren't dropped either. This
+  // runs after the rename heuristic, so drop+create pairs still resolve to
+  // renames as usual — only true deletions are suppressed.
+  if (options.ignoreTableDeletion) {
+    for (const drop of tableDrops) {
+      ignore.add(drop.current.name);
+    }
+    tableDrops = [];
+  }
 
   const columnRenames = getColumnRenames(diff, ignore);
 

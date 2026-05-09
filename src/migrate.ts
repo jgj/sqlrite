@@ -1,5 +1,5 @@
 import { getDriver } from "./driver";
-import { getMigrationPreview } from "./migration-statements";
+import { type MigrationOptions, getMigrationPreview } from "./migration-statements";
 import type { SQLite } from "./sqlite";
 
 /**
@@ -8,9 +8,10 @@ import type { SQLite } from "./sqlite";
  * @param client A sqlite client
  * @param ddl A string containing all the DDL create statements representing
  *            the desired database schema
+ * @param options Migration options that influence which differences produce statements
  */
-export async function migrate(client: SQLite, ddl: string) {
-  const { statements, warnings } = await getMigrationPreview(client, ddl);
+export async function migrate(client: SQLite, ddl: string, options: MigrationOptions = {}) {
+  const { statements, warnings } = await getMigrationPreview(client, ddl, options);
   const driver = getDriver(client);
   const result = await driver.migrate(statements);
   return { ...result, statements, warnings };

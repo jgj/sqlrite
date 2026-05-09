@@ -75,6 +75,177 @@ describe("createMigrationPlan", () => {
       expect(plan[0].current?.name).toBe("old_table");
     });
 
+    describe("ignoreTableDeletion option", () => {
+      it("suppresses table drops when enabled", () => {
+        const diff = createEmptySchemaDiff();
+        diff.table.removed = [
+          {
+            type: "table",
+            name: "legacy",
+            sql: "CREATE TABLE legacy (id INTEGER PRIMARY KEY)",
+            views: [],
+            num_cols: 1,
+          },
+        ];
+
+        const plan = createMigrationPlan(diff, { ignoreTableDeletion: true });
+
+        expect(plan).toHaveLength(0);
+      });
+
+      it("still emits a rename when a drop+create pair looks like a rename", () => {
+        const diff = createEmptySchemaDiff();
+        diff.table.added = [
+          {
+            type: "table",
+            name: "new_name",
+            sql: "CREATE TABLE new_name (id INTEGER PRIMARY KEY)",
+            views: [],
+            num_cols: 1,
+          },
+        ];
+        diff.table.removed = [
+          {
+            type: "table",
+            name: "old_name",
+            sql: "CREATE TABLE old_name (id INTEGER PRIMARY KEY)",
+            views: [],
+            num_cols: 1,
+          },
+        ];
+
+        const plan = createMigrationPlan(diff, { ignoreTableDeletion: true });
+
+        expect(plan).toHaveLength(1);
+        expect(plan[0].type).toBe("rename");
+        expect(plan[0].current?.name).toBe("old_name");
+        expect(plan[0].target?.name).toBe("new_name");
+      });
+
+      it("suppresses dependent index drops on ignored tables", () => {
+        const diff = createEmptySchemaDiff();
+        diff.table.removed = [
+          {
+            type: "table",
+            name: "legacy",
+            sql: "CREATE TABLE legacy (id INTEGER PRIMARY KEY, name TEXT)",
+            views: [],
+            num_cols: 2,
+          },
+        ];
+        diff.index.removed = [
+          {
+            type: "index",
+            name: "legacy_name_idx",
+            table: "legacy",
+            columns: ["name"],
+            unique: false,
+            sql: "CREATE INDEX legacy_name_idx ON legacy (name)",
+          },
+        ];
+
+        const plan = createMigrationPlan(diff, { ignoreTableDeletion: true });
+
+        expect(plan).toHaveLength(0);
+      });
+
+      it("suppresses dependent trigger drops on ignored tables", () => {
+        const diff = createEmptySchemaDiff();
+        diff.table.removed = [
+          {
+            type: "table",
+            name: "legacy",
+            sql: "CREATE TABLE legacy (id INTEGER PRIMARY KEY)",
+            views: [],
+            num_cols: 1,
+          },
+        ];
+        diff.trigger.removed = [
+          {
+            type: "trigger",
+            name: "legacy_trigger",
+            table: "legacy",
+            sql: "CREATE TRIGGER legacy_trigger AFTER INSERT ON legacy BEGIN SELECT 1; END",
+          },
+        ];
+
+        const plan = createMigrationPlan(diff, { ignoreTableDeletion: true });
+
+        expect(plan).toHaveLength(0);
+      });
+
+      it("suppresses view drops that depend on ignored tables", () => {
+        const diff = createEmptySchemaDiff();
+        diff.table.removed = [
+          {
+            type: "table",
+            name: "legacy",
+            sql: "CREATE TABLE legacy (id INTEGER PRIMARY KEY)",
+            views: [],
+            num_cols: 1,
+          },
+        ];
+        diff.view.removed = [
+          {
+            type: "view",
+            name: "legacy_view",
+            sql: "CREATE VIEW legacy_view AS SELECT * FROM legacy",
+            tables: ["legacy"],
+          },
+        ];
+
+        const plan = createMigrationPlan(diff, { ignoreTableDeletion: true });
+
+        expect(plan).toHaveLength(0);
+      });
+
+      it("does not affect drops of tables present in desired (only true deletions)", () => {
+        const diff = createEmptySchemaDiff();
+        diff.table.added = [
+          {
+            type: "table",
+            name: "added",
+            sql: "CREATE TABLE added (id INTEGER PRIMARY KEY)",
+            views: [],
+            num_cols: 1,
+          },
+        ];
+        diff.table.removed = [
+          {
+            type: "table",
+            name: "legacy",
+            sql: "CREATE TABLE legacy (id INTEGER PRIMARY KEY, name TEXT)",
+            views: [],
+            num_cols: 2,
+          },
+        ];
+
+        const plan = createMigrationPlan(diff, { ignoreTableDeletion: true });
+
+        expect(plan).toHaveLength(1);
+        expect(plan[0].type).toBe("create");
+        expect(plan[0].target?.name).toBe("added");
+      });
+
+      it("preserves default behavior when option is unset", () => {
+        const diff = createEmptySchemaDiff();
+        diff.table.removed = [
+          {
+            type: "table",
+            name: "legacy",
+            sql: "CREATE TABLE legacy (id INTEGER PRIMARY KEY)",
+            views: [],
+            num_cols: 1,
+          },
+        ];
+
+        const plan = createMigrationPlan(diff);
+
+        expect(plan).toHaveLength(1);
+        expect(plan[0].type).toBe("drop");
+      });
+    });
+
     it("should identify table rename operations", () => {
       const diff = createEmptySchemaDiff();
       diff.table.added = [

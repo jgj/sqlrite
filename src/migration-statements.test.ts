@@ -61,7 +61,7 @@ describe("getMigrationStatements", () => {
     expect(getNextDriver).toHaveBeenCalledWith(mockClient, mockDDL);
     expect(introspect).toHaveBeenCalledWith(mockNextDriver);
     expect(compareSchema).toHaveBeenCalledWith(mockCurrentSchema, mockNextSchema);
-    expect(createMigrationPlan).toHaveBeenCalledWith(mockDiff);
+    expect(createMigrationPlan).toHaveBeenCalledWith(mockDiff, {});
     expect(generateDDL).toHaveBeenCalledWith(mockMigrationPlan, mockCurrentSchema, mockNextSchema);
 
     // Verify result
