@@ -83,4 +83,63 @@ describe("compareIndices", () => {
     expect(result.removed).toHaveLength(0);
     expect(result.modified).toHaveLength(0);
   });
+
+  it("ignores cosmetic SQL differences (whitespace before paren, quoting)", () => {
+    const current: Index[] = [
+      {
+        ...baseIndex,
+        sql: 'CREATE INDEX "test_idx" ON "users" ("email")',
+      },
+    ];
+    const desired: Index[] = [
+      {
+        ...baseIndex,
+        sql: 'CREATE INDEX "test_idx" ON "users"("email")',
+      },
+    ];
+
+    const result = compareIndices(current, desired);
+
+    expect(result.modified).toHaveLength(0);
+  });
+
+  it("ignores identifier quoting style differences (backticks vs double quotes)", () => {
+    const current: Index[] = [
+      {
+        ...baseIndex,
+        sql: "CREATE INDEX `test_idx` ON `users` (`email`)",
+      },
+    ];
+    const desired: Index[] = [
+      {
+        ...baseIndex,
+        sql: 'CREATE INDEX "test_idx" ON "users"("email")',
+      },
+    ];
+
+    const result = compareIndices(current, desired);
+
+    expect(result.modified).toHaveLength(0);
+  });
+
+  it("ignores cosmetic SQL differences (comma spacing) on multi-column indexes", () => {
+    const current: Index[] = [
+      {
+        ...baseIndex,
+        columns: ["a", "b"],
+        sql: 'CREATE INDEX "test_idx" ON "users" ("a","b")',
+      },
+    ];
+    const desired: Index[] = [
+      {
+        ...baseIndex,
+        columns: ["a", "b"],
+        sql: 'CREATE INDEX "test_idx" ON "users"("a", "b")',
+      },
+    ];
+
+    const result = compareIndices(current, desired);
+
+    expect(result.modified).toHaveLength(0);
+  });
 });

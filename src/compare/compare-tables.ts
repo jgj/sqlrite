@@ -1,5 +1,6 @@
 import type { Table } from "../introspection-result";
 import { toMapByName } from "../utils";
+import { normalizeSql } from "./normalize-sql";
 import type { Diff, Modified } from "./types";
 
 export function compareTables(current: Table[], desired: Table[]): Diff<Table> {
@@ -31,27 +32,5 @@ export function compareTables(current: Table[], desired: Table[]): Diff<Table> {
 }
 
 function hasTableLevelDifferences(current: string, desired: string): boolean {
-  return normalizeTableSql(current) !== normalizeTableSql(desired);
-}
-
-// Normalize CREATE TABLE SQL for comparison by removing cosmetic differences
-// that don't affect the schema semantics.
-//
-// SQLite's ALTER TABLE ADD COLUMN appends columns to the stored SQL in a way
-// that differs from a fresh CREATE TABLE — e.g. different whitespace around
-// commas, quoted identifiers, trailing spaces before closing parens.
-function normalizeTableSql(sql: string): string {
-  return (
-    sql
-      // Remove double-quoted identifiers (SQLite adds these on ALTER TABLE ADD COLUMN)
-      .replace(/"([a-zA-Z_][a-zA-Z0-9_]*)"/g, "$1")
-      // Normalize whitespace
-      .replace(/\s+/g, " ")
-      // Normalize space around commas: ensure exactly ", "
-      .replace(/\s*,\s*/g, ", ")
-      // Normalize space inside parens: "( " -> "(", " )" -> ")"
-      .replace(/\(\s+/g, "(")
-      .replace(/\s+\)/g, ")")
-      .trim()
-  );
+  return normalizeSql(current) !== normalizeSql(desired);
 }

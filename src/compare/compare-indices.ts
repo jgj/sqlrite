@@ -1,5 +1,6 @@
 import type { Index } from "../introspection-result";
 import { toMapByName } from "../utils";
+import { normalizeSql } from "./normalize-sql";
 import type { Diff, Modified } from "./types";
 
 export function compareIndices(current: Index[], desired: Index[]): Diff<Index> {
@@ -56,12 +57,4 @@ function getIndexChanges(current: Index, desired: Index): (keyof Index)[] {
   }
 
   return changes;
-}
-
-function normalizeSql(sql: string | null): string | null {
-  if (sql === null) return null;
-  return sql
-    .replace(/"([a-zA-Z_][a-zA-Z0-9_]*)"/g, "$1")
-    .replace(/\s+/g, " ")
-    .trim();
 }
