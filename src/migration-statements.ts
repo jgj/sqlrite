@@ -25,6 +25,19 @@ export type MigrationOptions = {
    * @default false
    */
   ignoreTableDeletion?: boolean;
+
+  /**
+   * When true, column reordering between current and desired schemas does not
+   * trigger a table recreation. Other column changes on the same table (data
+   * type, nullability, default, etc.) still trigger recreation as usual.
+   *
+   * Useful when adopting sqlrite on an established database whose physical
+   * column order has drifted from the declared schema and an immediate
+   * full-table rewrite is undesirable.
+   *
+   * @default false
+   */
+  ignoreColumnOrder?: boolean;
 };
 
 export type MigrationPreview = {
