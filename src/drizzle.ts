@@ -117,7 +117,9 @@ function generateColumnDef(col: ColumnConfig): string {
 
   // GENERATED ALWAYS AS
   if (col.generated) {
-    const expr = serializeSQL(col.generated.as as SQL);
+    const raw = col.generated.as;
+    const resolved = typeof raw === "function" ? raw() : raw;
+    const expr = is(resolved, SQL) ? serializeSQL(resolved) : serializeDefault(resolved);
     const mode = col.generated.mode === "stored" ? "STORED" : "VIRTUAL";
     def += ` GENERATED ALWAYS AS (${expr}) ${mode}`;
   }
