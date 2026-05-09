@@ -28,7 +28,7 @@ export function createMigrationPlan(
   let [tableCreates, tableDrops, tableRenames] = getTableRenames(diff);
 
   // Get all tables that need to be recreated
-  const tableRecreates = getTableRecreates(diff);
+  const tableRecreates = getTableRecreates(diff, options);
   const ignore = new Set(tableRecreates.map((t) => t.target.name));
 
   // ignoreTableDeletion: suppress drop operations and treat these tables as
@@ -145,7 +145,7 @@ function recordRecreate(
   list.push({ check, detail });
 }
 
-function getTableRecreates(diff: SchemaDiff): RecreateOperation[] {
+function getTableRecreates(diff: SchemaDiff, options: MigrationOptions): RecreateOperation[] {
   const result = new Array<RecreateOperation>();
   const reasons: RecreateReasonMap = new Map();
 
@@ -155,7 +155,7 @@ function getTableRecreates(diff: SchemaDiff): RecreateOperation[] {
   );
 
   // Check for column changes that require table recreation
-  checkColumnsForRecreation(diff, reasons);
+  checkColumnsForRecreation(diff, reasons, options);
 
   // Check for primary key changes that require table recreation
   checkPrimaryKeysForRecreation(diff, reasons);
@@ -167,7 +167,7 @@ function getTableRecreates(diff: SchemaDiff): RecreateOperation[] {
   checkIndicesForRecreation(diff, reasons);
 
   // Check for tables that would have previously been rewritten
-  checkTablesForConstraintChanges(diff, reasons);
+  checkTablesForConstraintChanges(diff, reasons, options);
 
   // Generate RecreateOperations for identified tables
   for (const [tableName, tableReasons] of reasons) {
@@ -185,7 +185,11 @@ function getTableRecreates(diff: SchemaDiff): RecreateOperation[] {
   return result;
 }
 
-function checkColumnsForRecreation(diff: SchemaDiff, reasons: RecreateReasonMap): void {
+function checkColumnsForRecreation(
+  diff: SchemaDiff,
+  reasons: RecreateReasonMap,
+  options: MigrationOptions,
+): void {
   // Group columns by table for easier analysis
   const columnsByTable = new Map<string, { current: Column[]; desired: Column[] }>();
 
@@ -260,13 +264,17 @@ function checkColumnsForRecreation(diff: SchemaDiff, reasons: RecreateReasonMap)
   for (const [tableName, { current, desired }] of columnsByTable.entries()) {
     // Check if column order has changed
     if (hasColumnOrderChanged(current, desired)) {
-      recordRecreate(
-        reasons,
-        tableName,
-        "column.order_changed",
-        "Column ordering differs between current and desired",
-      );
-      continue;
+      if (!options.ignoreColumnOrder) {
+        recordRecreate(
+          reasons,
+          tableName,
+          "column.order_changed",
+          "Column ordering differs between current and desired",
+        );
+        continue;
+      }
+      // option on: don't record reorder reason; fall through so other column-level
+      // changes (data_type, nullable, etc.) on this table still get checked
     }
 
     // Check for data type changes, nullability changes, etc.
@@ -443,7 +451,11 @@ function checkIndicesForRecreation(diff: SchemaDiff, reasons: RecreateReasonMap)
   }
 }
 
-function checkTablesForConstraintChanges(diff: SchemaDiff, reasons: RecreateReasonMap): void {
+function checkTablesForConstraintChanges(
+  diff: SchemaDiff,
+  reasons: RecreateReasonMap,
+  options: MigrationOptions,
+): void {
   // Identify tables with DEFAULT value changes or NOT NULL constraint changes
   for (const { current, desired, changes } of diff.column.modified) {
     // Default value changes require recreation
@@ -499,6 +511,11 @@ function checkTablesForConstraintChanges(diff: SchemaDiff, reasons: RecreateReas
     // If this table has column adds, drops, or renames, those explain the SQL difference
     if (tableHasColumnStructureChanges(current.name, diff)) continue;
 
+    // With ignoreColumnOrder on, a pure reorder makes the SQL string differ but
+    // is intentionally being ignored — don't let table.sql_diff reintroduce the
+    // recreate the column.order_changed branch already declined to record.
+    if (options.ignoreColumnOrder && tableHasOnlyColumnReorder(current.name, diff)) continue;
+
     // Remaining SQL differences are constraint-level changes requiring recreation
     recordRecreate(
       reasons,
@@ -507,6 +524,14 @@ function checkTablesForConstraintChanges(diff: SchemaDiff, reasons: RecreateReas
       `Table SQL differs and no column add/drop/rename explains it.\n  current.sql:\n    ${current.sql}\n  desired.sql:\n    ${desired.sql}`,
     );
   }
+}
+
+// True when the only column-level differences for this table are ordinal_position
+// changes — i.e. the SQL string differs solely because columns were reordered.
+function tableHasOnlyColumnReorder(tableName: string, diff: SchemaDiff): boolean {
+  const mods = diff.column.modified.filter((m) => m.current.table === tableName);
+  if (mods.length === 0) return false;
+  return mods.every((m) => m.changes.length === 1 && m.changes[0] === "ordinal_position");
 }
 
 // Check if a table's SQL difference is explained by column-level operations

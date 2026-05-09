@@ -246,6 +246,153 @@ describe("createMigrationPlan", () => {
       });
     });
 
+    describe("ignoreColumnOrder option", () => {
+      function buildReorderDiff(): SchemaDiff {
+        const diff = createEmptySchemaDiff();
+
+        const originalTable = {
+          type: "table" as const,
+          name: "products",
+          sql: "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price REAL)",
+          views: [],
+          num_cols: 3,
+        };
+        const reorderedTable = {
+          type: "table" as const,
+          name: "products",
+          sql: "CREATE TABLE products (id INTEGER PRIMARY KEY, price REAL, name TEXT)",
+          views: [],
+          num_cols: 3,
+        };
+
+        diff.table.modified = [
+          {
+            current: originalTable,
+            desired: reorderedTable,
+            changes: ["sql"],
+          },
+        ];
+
+        const baseColumn = {
+          type: "column" as const,
+          table: "products",
+          character_maximum_length: null,
+          precision: null,
+          default: "",
+          check_constraint: null,
+          autoincrement: false,
+          generated: "none" as const,
+        };
+
+        diff.column.modified = [
+          {
+            current: {
+              ...baseColumn,
+              name: "name",
+              data_type: "TEXT",
+              ordinal_position: 2,
+              nullable: true,
+            },
+            desired: {
+              ...baseColumn,
+              name: "name",
+              data_type: "TEXT",
+              ordinal_position: 3,
+              nullable: true,
+            },
+            changes: ["ordinal_position"],
+          },
+          {
+            current: {
+              ...baseColumn,
+              name: "price",
+              data_type: "REAL",
+              ordinal_position: 3,
+              nullable: true,
+            },
+            desired: {
+              ...baseColumn,
+              name: "price",
+              data_type: "REAL",
+              ordinal_position: 2,
+              nullable: true,
+            },
+            changes: ["ordinal_position"],
+          },
+        ];
+
+        return diff;
+      }
+
+      it("does not recreate the table for a pure column reorder when enabled", () => {
+        const diff = buildReorderDiff();
+
+        const plan = createMigrationPlan(diff, { ignoreColumnOrder: true });
+
+        expect(plan).toHaveLength(0);
+      });
+
+      it("still recreates by default when option is unset", () => {
+        const diff = buildReorderDiff();
+
+        const plan = createMigrationPlan(diff);
+
+        const recreates = plan.filter((op) => op.type === "recreate");
+        expect(recreates).toHaveLength(1);
+        const checks = (recreates[0].reasons ?? []).map((r) => r.check);
+        expect(checks).toContain("column.order_changed");
+      });
+
+      it("still recreates when reorder coincides with a data_type change", () => {
+        const diff = buildReorderDiff();
+        // Add a data_type change for "price" alongside its ordinal change.
+        diff.column.modified[1] = {
+          ...diff.column.modified[1],
+          desired: { ...diff.column.modified[1].desired, data_type: "NUMERIC" },
+          changes: ["ordinal_position", "data_type"],
+        };
+
+        const plan = createMigrationPlan(diff, { ignoreColumnOrder: true });
+
+        const recreates = plan.filter((op) => op.type === "recreate");
+        expect(recreates).toHaveLength(1);
+        const checks = (recreates[0].reasons ?? []).map((r) => r.check);
+        expect(checks).toContain("column.modified.data_type");
+        expect(checks).not.toContain("column.order_changed");
+      });
+
+      it("does not interfere with a non-reorder constraint change on a different table", () => {
+        const diff = buildReorderDiff();
+        const otherTable = {
+          type: "table" as const,
+          name: "audit",
+          sql: "CREATE TABLE audit (id INTEGER PRIMARY KEY)",
+          views: [],
+          num_cols: 1,
+        };
+        const otherTableModified = {
+          type: "table" as const,
+          name: "audit",
+          sql: "CREATE TABLE audit (id INTEGER PRIMARY KEY, CHECK (id > 0))",
+          views: [],
+          num_cols: 1,
+        };
+        diff.table.modified.push({
+          current: otherTable,
+          desired: otherTableModified,
+          changes: ["sql"],
+        });
+
+        const plan = createMigrationPlan(diff, { ignoreColumnOrder: true });
+
+        const recreates = plan.filter((op) => op.type === "recreate");
+        expect(recreates).toHaveLength(1);
+        expect(recreates[0].current.name).toBe("audit");
+        const checks = (recreates[0].reasons ?? []).map((r) => r.check);
+        expect(checks).toContain("table.sql_diff");
+      });
+    });
+
     it("should identify table rename operations", () => {
       const diff = createEmptySchemaDiff();
       diff.table.added = [

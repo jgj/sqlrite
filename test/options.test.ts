@@ -129,4 +129,104 @@ describe("MigrationOptions", () => {
       expect(preview.warnings.some((w) => w.type === "destructive")).toBe(true);
     });
   });
+
+  describe("ignoreColumnOrder", () => {
+    let client: SQLite;
+
+    beforeEach(async () => {
+      client = await getLibsqlClient();
+    });
+
+    afterEach(async () => {
+      if ("close" in client) {
+        await client.close();
+      }
+    });
+
+    it("emits no statements for a pure reorder when enabled", async () => {
+      const driver = getDriver(client);
+      await driver.execute(
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price REAL);",
+      );
+
+      const preview = await getMigrationPreview(
+        client,
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, price REAL, name TEXT);",
+        { ignoreColumnOrder: true },
+      );
+
+      expect(preview.statements).toEqual([]);
+      expect(preview.warnings).toEqual([]);
+    });
+
+    it("default behavior recreates the table for a reorder", async () => {
+      const driver = getDriver(client);
+      await driver.execute(
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price REAL);",
+      );
+
+      const preview = await getMigrationPreview(
+        client,
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, price REAL, name TEXT);",
+      );
+
+      expect(preview.plan.some((op) => op.type === "recreate")).toBe(true);
+    });
+
+    it("still applies a column add when reorder is also present", async () => {
+      const driver = getDriver(client);
+      await driver.execute(
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price REAL);",
+      );
+
+      const preview = await getMigrationPreview(
+        client,
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, price REAL, name TEXT, sku TEXT);",
+        { ignoreColumnOrder: true },
+      );
+
+      expect(preview.statements.some((s) => /ALTER TABLE.*ADD COLUMN.*sku/i.test(s))).toBe(true);
+    });
+
+    it("still recreates when a column changes type alongside reorder", async () => {
+      const driver = getDriver(client);
+      await driver.execute(
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price REAL);",
+      );
+
+      const preview = await getMigrationPreview(
+        client,
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, price NUMERIC, name TEXT);",
+        { ignoreColumnOrder: true },
+      );
+
+      expect(preview.plan.some((op) => op.type === "recreate")).toBe(true);
+    });
+
+    it("preserves data and column order in the live DB after a no-op ignored reorder", async () => {
+      const driver = getDriver(client);
+      await driver.execute(
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price REAL); INSERT INTO products (name, price) VALUES ('apple', 1.5);",
+      );
+
+      await migrate(
+        client,
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, price REAL, name TEXT);",
+        { ignoreColumnOrder: true },
+      );
+
+      const rows = await driver.query<{ name: string; price: number }>(
+        "SELECT name, price FROM products",
+      );
+      expect(rows).toEqual([{ name: "apple", price: 1.5 }]);
+
+      // Subsequent runs with the option on should also be no-ops.
+      const second = await getMigrationPreview(
+        client,
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, price REAL, name TEXT);",
+        { ignoreColumnOrder: true },
+      );
+      expect(second.statements).toEqual([]);
+    });
+  });
 });
