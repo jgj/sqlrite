@@ -54,8 +54,8 @@ describe("compareForeignKeys", () => {
     expect(result.added).toHaveLength(0);
     expect(result.removed).toHaveLength(0);
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].changes).toContain("on_delete");
-    expect(result.modified[0].changes).toContain("referenced_table");
+    expect(result.modified[0]?.changes).toContain("on_delete");
+    expect(result.modified[0]?.changes).toContain("referenced_table");
   });
 
   it("should detect definition changes", () => {
@@ -70,7 +70,7 @@ describe("compareForeignKeys", () => {
     const result = compareForeignKeys(current, desired);
 
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].changes).toContain("definition");
+    expect(result.modified[0]?.changes).toContain("definition");
   });
 
   it("should handle multiple foreign keys", () => {
@@ -99,8 +99,8 @@ describe("compareForeignKeys", () => {
     expect(result.added).toHaveLength(1);
     expect(result.removed).toHaveLength(1);
     expect(result.modified).toHaveLength(1);
-    expect(result.added[0].name).toBe("third_fk");
-    expect(result.removed[0].name).toBe("second_fk");
-    expect(result.modified[0].changes).toContain("on_delete");
+    expect(result.added[0]?.name).toBe("third_fk");
+    expect(result.removed[0]?.name).toBe("second_fk");
+    expect(result.modified[0]?.changes).toContain("on_delete");
   });
 });

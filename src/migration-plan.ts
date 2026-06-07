@@ -571,20 +571,21 @@ function getColumnRenames(
   for (const tableName of tablesWithBoth) {
     const removed = removedByTable[tableName];
     const added = addedByTable[tableName];
+    if (!removed || !added) continue;
 
     // Track which columns have been matched to avoid double-matching
     const matchedAdded = new Set<number>();
     const matchedRemoved = new Set<number>();
 
     // First pass: look for highly similar columns (strong matches)
-    for (let i = 0; i < removed.length; i++) {
+    for (const [i, removedCol] of removed.entries()) {
       if (matchedRemoved.has(i)) continue;
 
-      for (let j = 0; j < added.length; j++) {
+      for (const [j, addedCol] of added.entries()) {
         if (matchedAdded.has(j)) continue;
 
-        if (columnsLookLikeRename(removed[i], added[j], true)) {
-          result.push(createRenameOperation(removed[i], added[j]));
+        if (columnsLookLikeRename(removedCol, addedCol, true)) {
+          result.push(createRenameOperation(removedCol, addedCol));
           matchedRemoved.add(i);
           matchedAdded.add(j);
           break;
@@ -593,14 +594,14 @@ function getColumnRenames(
     }
 
     // Second pass: look for columns that are similar but might have some differences
-    for (let i = 0; i < removed.length; i++) {
+    for (const [i, removedCol] of removed.entries()) {
       if (matchedRemoved.has(i)) continue;
 
-      for (let j = 0; j < added.length; j++) {
+      for (const [j, addedCol] of added.entries()) {
         if (matchedAdded.has(j)) continue;
 
-        if (columnsLookLikeRename(removed[i], added[j], false)) {
-          result.push(createRenameOperation(removed[i], added[j]));
+        if (columnsLookLikeRename(removedCol, addedCol, false)) {
+          result.push(createRenameOperation(removedCol, addedCol));
           matchedRemoved.add(i);
           matchedAdded.add(j);
           break;
@@ -622,10 +623,9 @@ function createRenameOperation(removed: Column, added: Column): RenameOperation<
 
 function groupColumnsByTable(columns: Column[]): Record<string, Column[]> {
   return columns.reduce<Record<string, Column[]>>((groups, column) => {
-    if (!groups[column.table]) {
-      groups[column.table] = [];
-    }
-    groups[column.table].push(column);
+    const group = groups[column.table] ?? [];
+    group.push(column);
+    groups[column.table] = group;
     return groups;
   }, {});
 }

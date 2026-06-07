@@ -98,10 +98,9 @@ export function generateDDL(
 // Helper to group columns by table for faster lookup
 function groupColumnsByTable(columns: Column[]): Record<string, Column[]> {
   return columns.reduce<Record<string, Column[]>>((acc, column) => {
-    if (!acc[column.table]) {
-      acc[column.table] = [];
-    }
-    acc[column.table].push(column);
+    const group = acc[column.table] ?? [];
+    group.push(column);
+    acc[column.table] = group;
     return acc;
   }, {});
 }
@@ -302,10 +301,10 @@ function buildColumnMapping(
 
     const matchedCurrentIdxs = new Set<number>();
     for (const targetCol of unmatchedTarget) {
-      for (let i = 0; i < unmatchedCurrent.length; i++) {
+      for (const [i, currentCol] of unmatchedCurrent.entries()) {
         if (matchedCurrentIdxs.has(i)) continue;
-        if (columnsLookLikeRename(unmatchedCurrent[i], targetCol, true)) {
-          mapping.push({ source: unmatchedCurrent[i].name, target: targetCol.name });
+        if (columnsLookLikeRename(currentCol, targetCol, true)) {
+          mapping.push({ source: currentCol.name, target: targetCol.name });
           matchedCurrentIdxs.add(i);
           break;
         }
@@ -315,10 +314,10 @@ function buildColumnMapping(
     // Relaxed pass for remaining unmatched
     for (const targetCol of unmatchedTarget) {
       if (mapping.some((m) => m.target === targetCol.name)) continue;
-      for (let i = 0; i < unmatchedCurrent.length; i++) {
+      for (const [i, currentCol] of unmatchedCurrent.entries()) {
         if (matchedCurrentIdxs.has(i)) continue;
-        if (columnsLookLikeRename(unmatchedCurrent[i], targetCol, false)) {
-          mapping.push({ source: unmatchedCurrent[i].name, target: targetCol.name });
+        if (columnsLookLikeRename(currentCol, targetCol, false)) {
+          mapping.push({ source: currentCol.name, target: targetCol.name });
           matchedCurrentIdxs.add(i);
           break;
         }

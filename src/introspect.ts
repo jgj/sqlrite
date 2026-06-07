@@ -266,7 +266,11 @@ select
 
 export async function introspect(driver: Driver) {
   const results = await driver.query<{ schema: string }>(introspectionSql);
-  const ir = parseIntrospectionResult(results[0].schema);
+  const row = results[0];
+  if (!row) {
+    throw new Error("Introspection query returned no results");
+  }
+  const ir = parseIntrospectionResult(row.schema);
 
   for (const table of ir.tables) {
     table.views = findViewsDependingOnTable(table, ir.views);

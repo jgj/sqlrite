@@ -57,8 +57,8 @@ describe("compareColumns", () => {
     expect(result.added).toHaveLength(0);
     expect(result.removed).toHaveLength(0);
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].changes).toContain("nullable");
-    expect(result.modified[0].changes).toContain("data_type");
+    expect(result.modified[0]?.changes).toContain("nullable");
+    expect(result.modified[0]?.changes).toContain("data_type");
   });
 
   it("should detect precision changes", () => {
@@ -78,7 +78,7 @@ describe("compareColumns", () => {
     const result = compareColumns(current, desired);
 
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].changes).toContain("precision");
+    expect(result.modified[0]?.changes).toContain("precision");
   });
 
   it("should detect character_maximum_length changes", () => {
@@ -98,6 +98,6 @@ describe("compareColumns", () => {
     const result = compareColumns(current, desired);
 
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].changes).toContain("character_maximum_length");
+    expect(result.modified[0]?.changes).toContain("character_maximum_length");
   });
 });

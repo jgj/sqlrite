@@ -201,7 +201,7 @@ describe("parseIntrospectionResult", () => {
 
     const result = parseIntrospectionResult(dataWithPrecision);
 
-    expect(result.columns[2].precision).toEqual({
+    expect(result.columns[2]?.precision).toEqual({
       precision: 10,
       scale: 2,
     });

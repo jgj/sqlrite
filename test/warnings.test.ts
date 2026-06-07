@@ -24,9 +24,9 @@ describe("migration warnings", () => {
 
     const preview = await getMigrationPreview(client, "");
     expect(preview.warnings).toHaveLength(1);
-    expect(preview.warnings[0].type).toBe("destructive");
-    expect(preview.warnings[0].message).toContain("old_data");
-    expect(preview.warnings[0].message).toContain("dropped");
+    expect(preview.warnings[0]?.type).toBe("destructive");
+    expect(preview.warnings[0]?.message).toContain("old_data");
+    expect(preview.warnings[0]?.message).toContain("dropped");
   });
 
   it("warns when dropping a column", async () => {
@@ -72,7 +72,7 @@ describe("migration warnings", () => {
 
     const cautions = preview.warnings.filter((w) => w.type === "caution");
     expect(cautions.length).toBeGreaterThan(0);
-    expect(cautions[0].message).toContain("recreated");
+    expect(cautions[0]?.message).toContain("recreated");
   });
 
   it("returns no warnings when no changes", async () => {
@@ -107,6 +107,6 @@ describe("migration warnings", () => {
 
     const result = await migrate(client, "");
     expect(result.warnings.length).toBeGreaterThan(0);
-    expect(result.warnings[0].type).toBe("destructive");
+    expect(result.warnings[0]?.type).toBe("destructive");
   });
 });

@@ -48,7 +48,7 @@ describe("compareTriggers", () => {
     expect(result.added).toHaveLength(0);
     expect(result.removed).toHaveLength(0);
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].changes).toContain("table");
+    expect(result.modified[0]?.changes).toContain("table");
   });
 
   it("should detect modified triggers with sql changes", () => {
@@ -63,7 +63,7 @@ describe("compareTriggers", () => {
     const result = compareTriggers(current, desired);
 
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].changes).toContain("sql");
+    expect(result.modified[0]?.changes).toContain("sql");
   });
 
   it("should detect multiple changes in the same trigger", () => {
@@ -79,8 +79,8 @@ describe("compareTriggers", () => {
     const result = compareTriggers(current, desired);
 
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].changes).toContain("table");
-    expect(result.modified[0].changes).toContain("sql");
-    expect(result.modified[0].changes).toHaveLength(2);
+    expect(result.modified[0]?.changes).toContain("table");
+    expect(result.modified[0]?.changes).toContain("sql");
+    expect(result.modified[0]?.changes).toHaveLength(2);
   });
 });

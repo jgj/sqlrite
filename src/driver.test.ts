@@ -222,7 +222,7 @@ describe("Driver module", () => {
         "SELECT name FROM sqlite_master WHERE type='table' AND name='test_next'",
       );
       expect(result.length).toBe(1);
-      expect(result[0].name).toBe("test_next");
+      expect(result[0]?.name).toBe("test_next");
     });
 
     it("should create new better-sqlite3 driver with DDL when given better-sqlite3 database", async () => {
@@ -238,7 +238,7 @@ describe("Driver module", () => {
         "SELECT name FROM sqlite_master WHERE type='table' AND name='test_next'",
       );
       expect(result.length).toBe(1);
-      expect(result[0].name).toBe("test_next");
+      expect(result[0]?.name).toBe("test_next");
     });
 
     it("should throw TypeError for unsupported client", async () => {

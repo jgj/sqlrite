@@ -63,11 +63,11 @@ describe("introspect", () => {
 
       expect(result).toHaveProperty("tables");
       expect(result.tables).toHaveLength(1);
-      expect(result.tables[0].name).toBe("test_table");
+      expect(result.tables[0]?.name).toBe("test_table");
       expect(result.columns).toHaveLength(1);
-      expect(result.columns[0].name).toBe("id");
+      expect(result.columns[0]?.name).toBe("id");
       expect(result.primary_keys).toHaveLength(1);
-      expect(result.primary_keys[0].column).toBe("id");
+      expect(result.primary_keys[0]?.column).toBe("id");
     });
 
     it("should handle empty schema", async () => {
@@ -169,7 +169,7 @@ describe("introspect", () => {
       const result = await introspect(driver);
 
       expect(result.tables).toHaveLength(1);
-      expect(result.tables[0].name).toBe("users");
+      expect(result.tables[0]?.name).toBe("users");
 
       expect(result.columns).toHaveLength(4);
 
@@ -195,8 +195,8 @@ describe("introspect", () => {
       expect(ageColumn?.default).toBe("18");
 
       expect(result.primary_keys).toHaveLength(1);
-      expect(result.primary_keys[0].table).toBe("users");
-      expect(result.primary_keys[0].column).toBe("id");
+      expect(result.primary_keys[0]?.table).toBe("users");
+      expect(result.primary_keys[0]?.column).toBe("id");
     });
 
     it("should introspect tables with foreign keys", async () => {
@@ -220,12 +220,12 @@ describe("introspect", () => {
       expect(result.tables.map((t) => t.name).sort()).toEqual(["posts", "users"]);
 
       expect(result.foreign_keys).toHaveLength(1);
-      expect(result.foreign_keys[0].table).toBe("posts");
-      expect(result.foreign_keys[0].column).toBe("user_id");
-      expect(result.foreign_keys[0].referenced_table).toBe("users");
-      expect(result.foreign_keys[0].referenced_column).toBe("id");
-      expect(result.foreign_keys[0].on_update).toBe("CASCADE");
-      expect(result.foreign_keys[0].on_delete).toBe("CASCADE");
+      expect(result.foreign_keys[0]?.table).toBe("posts");
+      expect(result.foreign_keys[0]?.column).toBe("user_id");
+      expect(result.foreign_keys[0]?.referenced_table).toBe("users");
+      expect(result.foreign_keys[0]?.referenced_column).toBe("id");
+      expect(result.foreign_keys[0]?.on_update).toBe("CASCADE");
+      expect(result.foreign_keys[0]?.on_delete).toBe("CASCADE");
     });
 
     it("should introspect indices (unique and non-unique)", async () => {
@@ -385,10 +385,10 @@ describe("introspect", () => {
       const result = await introspect(driver);
 
       expect(result.triggers).toHaveLength(1);
-      expect(result.triggers[0].name).toBe("after_insert_user");
-      expect(result.triggers[0].table).toBe("users");
-      expect(result.triggers[0].sql).toContain("CREATE TRIGGER after_insert_user");
-      expect(result.triggers[0].sql).toContain("AFTER INSERT ON users");
+      expect(result.triggers[0]?.name).toBe("after_insert_user");
+      expect(result.triggers[0]?.table).toBe("users");
+      expect(result.triggers[0]?.sql).toContain("CREATE TRIGGER after_insert_user");
+      expect(result.triggers[0]?.sql).toContain("AFTER INSERT ON users");
     });
 
     it("should introspect multi-column primary keys", async () => {
@@ -404,9 +404,9 @@ describe("introspect", () => {
       const result = await introspect(driver);
 
       expect(result.primary_keys).toHaveLength(1);
-      expect(result.primary_keys[0].table).toBe("order_items");
-      expect(result.primary_keys[0].column).toBe("order_id,product_id");
-      expect(result.primary_keys[0].field_count).toBe(2);
+      expect(result.primary_keys[0]?.table).toBe("order_items");
+      expect(result.primary_keys[0]?.column).toBe("order_id,product_id");
+      expect(result.primary_keys[0]?.field_count).toBe(2);
     });
 
     it("should introspect complex constraints", async () => {
@@ -426,9 +426,9 @@ describe("introspect", () => {
       expect(result.columns).toHaveLength(5);
 
       // SQLite stores CHECK constraints within the table SQL statement
-      expect(result.tables[0].sql).toContain("CHECK (price > 0)");
-      expect(result.tables[0].sql).toContain("CHECK (stock >= 0)");
-      expect(result.tables[0].sql).toContain(
+      expect(result.tables[0]?.sql).toContain("CHECK (price > 0)");
+      expect(result.tables[0]?.sql).toContain("CHECK (stock >= 0)");
+      expect(result.tables[0]?.sql).toContain(
         "CHECK (status IN ('available', 'discontinued', 'out_of_stock'))",
       );
     });
@@ -500,10 +500,10 @@ describe("introspect", () => {
       const result = await introspect(driver);
 
       expect(result.foreign_keys).toHaveLength(1);
-      expect(result.foreign_keys[0].table).toBe("order_details");
-      expect(result.foreign_keys[0].column).toBe("order_id");
-      expect(result.foreign_keys[0].referenced_table).toBe("orders");
-      expect(result.foreign_keys[0].referenced_column).toBe("id");
+      expect(result.foreign_keys[0]?.table).toBe("order_details");
+      expect(result.foreign_keys[0]?.column).toBe("order_id");
+      expect(result.foreign_keys[0]?.referenced_table).toBe("orders");
+      expect(result.foreign_keys[0]?.referenced_column).toBe("id");
     });
 
     // This test verifies that we correctly handle all the types that our schema definition supports
@@ -583,8 +583,8 @@ describe("introspect", () => {
       expect(categoryFk?.on_delete).toBe("SET NULL");
 
       const trigger = result.triggers[0];
-      expect(trigger.name).toBe("after_update_product_stock");
-      expect(trigger.table).toBe("products");
+      expect(trigger?.name).toBe("after_update_product_stock");
+      expect(trigger?.table).toBe("products");
     });
   });
 });

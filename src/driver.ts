@@ -57,11 +57,11 @@ const getBetterSqlite3Driver: DriverFactory<Database> = (client: Database) => {
       client
         .transaction((stmts: string[]) => {
           client.pragma("foreign_keys = off");
-          for (let i = 0; i < stmts.length; i++) {
+          for (const [i, stmt] of stmts.entries()) {
             try {
-              client.prepare(stmts[i]).run();
+              client.prepare(stmt).run();
             } catch (err) {
-              throw err instanceof Error ? new MigrationError(i, stmts[i], err) : err;
+              throw err instanceof Error ? new MigrationError(i, stmt, err) : err;
             }
           }
           client.pragma("foreign_keys = on");
@@ -89,11 +89,11 @@ const getNodeSqliteDriver: DriverFactory<DatabaseSync> = (client: DatabaseSync) 
     try {
       client.exec("PRAGMA foreign_keys = OFF");
       client.exec("BEGIN DEFERRED");
-      for (let i = 0; i < sql.length; i++) {
+      for (const [i, stmt] of sql.entries()) {
         try {
-          client.prepare(sql[i]).run();
+          client.prepare(stmt).run();
         } catch (err) {
-          throw err instanceof Error ? new MigrationError(i, sql[i], err) : err;
+          throw err instanceof Error ? new MigrationError(i, stmt, err) : err;
         }
       }
       client.exec("COMMIT");

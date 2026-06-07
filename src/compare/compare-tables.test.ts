@@ -22,7 +22,7 @@ describe("compareTables", () => {
     const result = compareTables(current, desired);
 
     expect(result.added).toHaveLength(1);
-    expect(result.added[0].name).toBe("posts");
+    expect(result.added[0]?.name).toBe("posts");
     expect(result.removed).toHaveLength(0);
     expect(result.modified).toHaveLength(0);
   });
@@ -38,7 +38,7 @@ describe("compareTables", () => {
     const result = compareTables(current, desired);
 
     expect(result.removed).toHaveLength(1);
-    expect(result.removed[0].name).toBe("posts");
+    expect(result.removed[0]?.name).toBe("posts");
     expect(result.added).toHaveLength(0);
     expect(result.modified).toHaveLength(0);
   });
@@ -53,9 +53,9 @@ describe("compareTables", () => {
     const result = compareTables(current, desired);
 
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].current.name).toBe("users");
-    expect(result.modified[0].desired.name).toBe("users");
-    expect(result.modified[0].changes).toEqual(["sql"]);
+    expect(result.modified[0]?.current.name).toBe("users");
+    expect(result.modified[0]?.desired.name).toBe("users");
+    expect(result.modified[0]?.changes).toEqual(["sql"]);
     expect(result.added).toHaveLength(0);
     expect(result.removed).toHaveLength(0);
   });
@@ -82,10 +82,10 @@ describe("compareTables", () => {
     const result = compareTables(current, desired);
 
     expect(result.added).toHaveLength(1);
-    expect(result.added[0].name).toBe("comments");
+    expect(result.added[0]?.name).toBe("comments");
     expect(result.removed).toHaveLength(1);
-    expect(result.removed[0].name).toBe("posts");
+    expect(result.removed[0]?.name).toBe("posts");
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].current.name).toBe("users");
+    expect(result.modified[0]?.current.name).toBe("users");
   });
 });

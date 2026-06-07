@@ -97,7 +97,7 @@ describe("MigrationOptions", () => {
       );
 
       expect(preview.plan).toHaveLength(1);
-      expect(preview.plan[0].type).toBe("rename");
+      expect(preview.plan[0]?.type).toBe("rename");
       expect(preview.statements.some((s) => /ALTER TABLE.*RENAME/i.test(s))).toBe(true);
     });
 

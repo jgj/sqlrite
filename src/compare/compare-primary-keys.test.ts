@@ -51,9 +51,9 @@ describe("comparePrimaryKeys", () => {
     expect(result.added).toHaveLength(0);
     expect(result.removed).toHaveLength(0);
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].changes).toContain("column");
-    expect(result.modified[0].changes).toContain("field_count");
-    expect(result.modified[0].changes).toContain("definition");
+    expect(result.modified[0]?.changes).toContain("column");
+    expect(result.modified[0]?.changes).toContain("field_count");
+    expect(result.modified[0]?.changes).toContain("definition");
   });
 
   it("should handle multiple primary keys", () => {
@@ -82,9 +82,9 @@ describe("comparePrimaryKeys", () => {
     expect(result.added).toHaveLength(1);
     expect(result.removed).toHaveLength(1);
     expect(result.modified).toHaveLength(1);
-    expect(result.added[0].table).toBe("third_table");
-    expect(result.removed[0].table).toBe("second_table");
-    expect(result.modified[0].changes).toContain("column");
+    expect(result.added[0]?.table).toBe("third_table");
+    expect(result.removed[0]?.table).toBe("second_table");
+    expect(result.modified[0]?.changes).toContain("column");
   });
 
   it("should handle composite primary keys", () => {
@@ -108,8 +108,8 @@ describe("comparePrimaryKeys", () => {
     const result = comparePrimaryKeys(current, desired);
 
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].changes).toContain("column");
-    expect(result.modified[0].changes).toContain("field_count");
-    expect(result.modified[0].changes).toContain("definition");
+    expect(result.modified[0]?.changes).toContain("column");
+    expect(result.modified[0]?.changes).toContain("field_count");
+    expect(result.modified[0]?.changes).toContain("definition");
   });
 });
