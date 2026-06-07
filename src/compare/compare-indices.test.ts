@@ -51,9 +51,9 @@ describe("compareIndices", () => {
     expect(result.added).toHaveLength(0);
     expect(result.removed).toHaveLength(0);
     expect(result.modified).toHaveLength(1);
-    expect(result.modified[0].changes).toEqual(["unique", "sql"]);
-    expect(result.modified[0].current).toEqual(baseIndex);
-    expect(result.modified[0].desired).toEqual(desired[0]);
+    expect(result.modified[0]?.changes).toEqual(["unique", "sql"]);
+    expect(result.modified[0]?.current).toEqual(baseIndex);
+    expect(result.modified[0]?.desired).toEqual(desired[0]);
   });
 
   it("should handle multiple changes simultaneously", () => {

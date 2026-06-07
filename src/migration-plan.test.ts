@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SchemaDiff } from "./compare/types";
+import type { Modified, SchemaDiff } from "./compare/types";
 import type { Column } from "./introspection-result";
 import { createMigrationPlan } from "./migration-plan";
 import { get } from "./test-utils";
@@ -52,8 +52,8 @@ describe("createMigrationPlan", () => {
       const plan = createMigrationPlan(diff);
 
       expect(plan).toHaveLength(1);
-      expect(plan[0].type).toBe("create");
-      expect(plan[0].target?.name).toBe("new_table");
+      expect(plan[0]?.type).toBe("create");
+      expect(plan[0]?.target?.name).toBe("new_table");
     });
 
     it("should generate table drop operations", () => {
@@ -71,8 +71,8 @@ describe("createMigrationPlan", () => {
       const plan = createMigrationPlan(diff);
 
       expect(plan).toHaveLength(1);
-      expect(plan[0].type).toBe("drop");
-      expect(plan[0].current?.name).toBe("old_table");
+      expect(plan[0]?.type).toBe("drop");
+      expect(plan[0]?.current?.name).toBe("old_table");
     });
 
     describe("ignoreTableDeletion option", () => {
@@ -117,9 +117,9 @@ describe("createMigrationPlan", () => {
         const plan = createMigrationPlan(diff, { ignoreTableDeletion: true });
 
         expect(plan).toHaveLength(1);
-        expect(plan[0].type).toBe("rename");
-        expect(plan[0].current?.name).toBe("old_name");
-        expect(plan[0].target?.name).toBe("new_name");
+        expect(plan[0]?.type).toBe("rename");
+        expect(plan[0]?.current?.name).toBe("old_name");
+        expect(plan[0]?.target?.name).toBe("new_name");
       });
 
       it("suppresses dependent index drops on ignored tables", () => {
@@ -223,8 +223,8 @@ describe("createMigrationPlan", () => {
         const plan = createMigrationPlan(diff, { ignoreTableDeletion: true });
 
         expect(plan).toHaveLength(1);
-        expect(plan[0].type).toBe("create");
-        expect(plan[0].target?.name).toBe("added");
+        expect(plan[0]?.type).toBe("create");
+        expect(plan[0]?.target?.name).toBe("added");
       });
 
       it("preserves default behavior when option is unset", () => {
@@ -242,7 +242,7 @@ describe("createMigrationPlan", () => {
         const plan = createMigrationPlan(diff);
 
         expect(plan).toHaveLength(1);
-        expect(plan[0].type).toBe("drop");
+        expect(plan[0]?.type).toBe("drop");
       });
     });
 
@@ -339,16 +339,17 @@ describe("createMigrationPlan", () => {
 
         const recreates = plan.filter((op) => op.type === "recreate");
         expect(recreates).toHaveLength(1);
-        const checks = (recreates[0].reasons ?? []).map((r) => r.check);
+        const checks = (recreates[0]?.reasons ?? []).map((r) => r.check);
         expect(checks).toContain("column.order_changed");
       });
 
       it("still recreates when reorder coincides with a data_type change", () => {
         const diff = buildReorderDiff();
         // Add a data_type change for "price" alongside its ordinal change.
+        const priceModified = diff.column.modified[1] as Modified<Column>;
         diff.column.modified[1] = {
-          ...diff.column.modified[1],
-          desired: { ...diff.column.modified[1].desired, data_type: "NUMERIC" },
+          ...priceModified,
+          desired: { ...priceModified.desired, data_type: "NUMERIC" },
           changes: ["ordinal_position", "data_type"],
         };
 
@@ -356,7 +357,7 @@ describe("createMigrationPlan", () => {
 
         const recreates = plan.filter((op) => op.type === "recreate");
         expect(recreates).toHaveLength(1);
-        const checks = (recreates[0].reasons ?? []).map((r) => r.check);
+        const checks = (recreates[0]?.reasons ?? []).map((r) => r.check);
         expect(checks).toContain("column.modified.data_type");
         expect(checks).not.toContain("column.order_changed");
       });
@@ -387,8 +388,8 @@ describe("createMigrationPlan", () => {
 
         const recreates = plan.filter((op) => op.type === "recreate");
         expect(recreates).toHaveLength(1);
-        expect(recreates[0].current.name).toBe("audit");
-        const checks = (recreates[0].reasons ?? []).map((r) => r.check);
+        expect(recreates[0]?.current.name).toBe("audit");
+        const checks = (recreates[0]?.reasons ?? []).map((r) => r.check);
         expect(checks).toContain("table.sql_diff");
       });
     });
@@ -417,9 +418,9 @@ describe("createMigrationPlan", () => {
       const plan = createMigrationPlan(diff);
 
       expect(plan).toHaveLength(1);
-      expect(plan[0].type).toBe("rename");
-      expect(plan[0].current?.name).toBe("old_name");
-      expect(plan[0].target?.name).toBe("new_name");
+      expect(plan[0]?.type).toBe("rename");
+      expect(plan[0]?.current?.name).toBe("old_name");
+      expect(plan[0]?.target?.name).toBe("new_name");
     });
 
     it("should not identify as renames when table structure differs", () => {
@@ -543,9 +544,9 @@ describe("createMigrationPlan", () => {
       const plan = createMigrationPlan(diff);
 
       expect(plan).toHaveLength(1);
-      expect(plan[0].type).toBe("create");
-      expect(plan[0].target?.name).toBe("email");
-      expect(get(plan[0], "target.table")).toBe("users");
+      expect(plan[0]?.type).toBe("create");
+      expect(plan[0]?.target?.name).toBe("email");
+      expect(get(plan[0] ?? {}, "target.table")).toBe("users");
     });
 
     it("should generate column drop operations", () => {
@@ -579,9 +580,9 @@ describe("createMigrationPlan", () => {
       const plan = createMigrationPlan(diff);
 
       expect(plan).toHaveLength(1);
-      expect(plan[0].type).toBe("drop");
-      expect(plan[0].current?.name).toBe("phone");
-      expect(get(plan[0], "current.table")).toBe("users");
+      expect(plan[0]?.type).toBe("drop");
+      expect(plan[0]?.current?.name).toBe("phone");
+      expect(get(plan[0] ?? {}, "current.table")).toBe("users");
     });
 
     it("should identify column renames", () => {
@@ -622,10 +623,10 @@ describe("createMigrationPlan", () => {
       const plan = createMigrationPlan(diff);
 
       expect(plan).toHaveLength(1);
-      expect(plan[0].type).toBe("rename");
-      expect(plan[0].current?.name).toBe("old_name");
-      expect(plan[0].target?.name).toBe("new_name");
-      expect(get(plan[0], "target.table")).toBe("users");
+      expect(plan[0]?.type).toBe("rename");
+      expect(plan[0]?.current?.name).toBe("old_name");
+      expect(plan[0]?.target?.name).toBe("new_name");
+      expect(get(plan[0] ?? {}, "target.table")).toBe("users");
     });
 
     it("should include table recreate when nullable column becomes non-nullable", () => {
@@ -1314,8 +1315,8 @@ describe("createMigrationPlan", () => {
       // We should have a recreation operation
       const recreateOps = plan.filter((op) => op.type === "recreate");
       expect(recreateOps.length).toBe(1);
-      expect(recreateOps[0].current.name).toBe("users");
-      expect(recreateOps[0].target.name).toBe("users");
+      expect(recreateOps[0]?.current.name).toBe("users");
+      expect(recreateOps[0]?.target.name).toBe("users");
 
       // We should NOT have rename, create, or drop operations for this column
       const renameOps = plan.filter((op) => op.type === "rename");
@@ -1644,18 +1645,18 @@ describe("createMigrationPlan", () => {
       // Add the column modifications - same columns, different positions
       diff.column.modified = [
         {
-          current: originalColumns[1], // name
-          desired: reorderedColumns[2], // name with new position
+          current: originalColumns[1] as Column, // name
+          desired: reorderedColumns[2] as Column, // name with new position
           changes: ["ordinal_position"],
         },
         {
-          current: originalColumns[2], // price
-          desired: reorderedColumns[3], // price with new position
+          current: originalColumns[2] as Column, // price
+          desired: reorderedColumns[3] as Column, // price with new position
           changes: ["ordinal_position"],
         },
         {
-          current: originalColumns[3], // description
-          desired: reorderedColumns[1], // description with new position
+          current: originalColumns[3] as Column, // description
+          desired: reorderedColumns[1] as Column, // description with new position
           changes: ["ordinal_position"],
         },
       ];
@@ -1665,11 +1666,11 @@ describe("createMigrationPlan", () => {
       // The table should be recreated
       const recreateOps = plan.filter((op) => op.type === "recreate");
       expect(recreateOps.length).toBe(1);
-      expect(recreateOps[0].current.name).toBe("products");
+      expect(recreateOps[0]?.current.name).toBe("products");
 
       // The reason for recreation should explicitly call out the column order change
-      expect(recreateOps[0].reasons).toBeDefined();
-      const checks = (recreateOps[0].reasons ?? []).map((r) => r.check);
+      expect(recreateOps[0]?.reasons).toBeDefined();
+      const checks = (recreateOps[0]?.reasons ?? []).map((r) => r.check);
       expect(checks).toContain("column.order_changed");
 
       // No separate column operations since the table is being recreated
@@ -1782,8 +1783,8 @@ describe("createMigrationPlan", () => {
       const recreateOps = plan.filter((op) => op.type === "recreate");
 
       expect(recreateOps.length).toBe(1); // Just one recreate
-      expect(recreateOps[0].current.name).toBe("events");
-      expect(recreateOps[0].target.name).toBe("events");
+      expect(recreateOps[0]?.current.name).toBe("events");
+      expect(recreateOps[0]?.target.name).toBe("events");
 
       // No separate column operations
       const columnOps = plan.filter(
@@ -1850,7 +1851,7 @@ describe("createMigrationPlan", () => {
           detail: expect.stringContaining("INTEGER"),
         }),
       ]);
-      expect(recreate?.reasons?.[0].detail).toContain("TEXT");
+      expect(recreate?.reasons?.[0]?.detail).toContain("TEXT");
     });
 
     it("populates a table.sql_diff reason with both SQL strings when no structural change explains it", () => {
