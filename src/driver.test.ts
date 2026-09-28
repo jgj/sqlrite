@@ -1,6 +1,16 @@
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+import type { Database } from "better-sqlite3";
 import { beforeEach, describe, expect, it } from "vitest";
 import { getDriver, getDriverType, getNextDriver } from "./driver";
-import { type SQLite, getBetterSqlite3Database, getLibsqlClient } from "./sqlite";
+import {
+  type SQLite,
+  getBetterSqlite3Database,
+  getLibsqlClient,
+  getNodeSqliteDatabase,
+} from "./sqlite";
+import { registerFactoryModule } from "./test-utils";
 
 describe("Driver module", () => {
   describe("getDriverType function", () => {
@@ -250,6 +260,124 @@ describe("Driver module", () => {
     it("should throw error when DDL is invalid", async () => {
       const client = await getLibsqlClient();
       await expect(getNextDriver(client, "INVALID SQL")).rejects.toThrow();
+    });
+
+    describe.each([
+      ["libsql", getLibsqlClient],
+      ["better-sqlite3", getBetterSqlite3Database],
+      ["node:sqlite", getNodeSqliteDatabase],
+    ])("prepare hook with %s", (_name, getClient) => {
+      it("runs on a fresh scratch client before the DDL", async () => {
+        const client = await getClient();
+        const seen: { scratch: SQLite; tables: string[] }[] = [];
+
+        const nextDriver = await getNextDriver(client, testDDL, async (scratch) => {
+          const tables = await getDriver(scratch).query<{ name: string }>(
+            "SELECT name FROM sqlite_schema WHERE type = 'table'",
+          );
+          seen.push({ scratch, tables: tables.map((t) => t.name) });
+        });
+
+        expect(seen).toHaveLength(1);
+        expect(seen[0]?.scratch).not.toBe(client);
+        expect(seen[0]?.tables).toEqual([]);
+
+        const result = await nextDriver.query<{ name: string }>(
+          "SELECT name FROM sqlite_schema WHERE type = 'table'",
+        );
+        expect(result.map((r) => r.name)).toEqual(["test_next"]);
+      });
+
+      it("builds the desired schema on the client the hook prepared", async () => {
+        const client = await getClient();
+        const nextDriver = await getNextDriver(client, testDDL, async (scratch) => {
+          await getDriver(scratch).execute("CREATE TABLE from_hook (id INTEGER)");
+        });
+
+        const result = await nextDriver.query<{ name: string }>(
+          "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name",
+        );
+        expect(result.map((r) => r.name)).toEqual(["from_hook", "test_next"]);
+      });
+
+      it("propagates errors thrown by the hook", async () => {
+        const client = await getClient();
+        await expect(
+          getNextDriver(client, testDDL, () => {
+            throw new Error("hook failed");
+          }),
+        ).rejects.toThrow("hook failed");
+      });
+    });
+
+    it("opens the node:sqlite scratch database with extension loading allowed", async () => {
+      const client = await getNodeSqliteDatabase();
+      let loadError: unknown;
+
+      await getNextDriver(client, testDDL, (scratch) => {
+        try {
+          (scratch as DatabaseSync).loadExtension("/nonexistent/sqlrite-missing-extension");
+        } catch (err) {
+          loadError = err;
+        }
+      });
+
+      // The load attempt reaches dlopen instead of being refused with
+      // ERR_INVALID_STATE ("extension loading is not allowed")
+      expect(loadError).toBeInstanceOf(Error);
+      expect((loadError as Error & { code?: string }).code).not.toBe("ERR_INVALID_STATE");
+      expect((loadError as Error).message).not.toMatch(/not allowed/);
+    });
+
+    // Node's permission model refuses to open a database with allowExtension,
+    // so the scratch database must only ask for it when a hook may load one
+    it("migrates a node:sqlite database under Node's permission model without a hook", () => {
+      const migratePath = resolve(__dirname, "migrate.ts");
+      const script = `
+        const { DatabaseSync } = await import("node:sqlite");
+        const mod = await import(${JSON.stringify(migratePath)});
+        const migrate = mod.migrate ?? mod.default.migrate;
+        const db = new DatabaseSync(":memory:");
+        db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
+        const res = await migrate(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
+        console.log(JSON.stringify({ success: res.success, statements: res.statements }));
+      `;
+      const child = spawnSync(
+        process.execPath,
+        [
+          "--no-warnings",
+          "--permission",
+          "--allow-fs-read=*",
+          "--allow-fs-write=*",
+          "--allow-child-process",
+          "--allow-worker",
+          "--import",
+          "tsx",
+          "--input-type=module",
+          "-e",
+          script,
+        ],
+        { encoding: "utf8", cwd: resolve(__dirname, "..") },
+      );
+
+      expect(child.stderr).toBe("");
+      expect(JSON.parse(child.stdout)).toEqual({
+        success: true,
+        statements: ['ALTER TABLE "users" ADD COLUMN "email" TEXT;'],
+      });
+    });
+
+    it("lets a better-sqlite3 hook register a module the DDL uses", async () => {
+      const client = await getBetterSqlite3Database();
+      const ddl = "CREATE VIRTUAL TABLE kv USING hook_module(a)";
+
+      await expect(getNextDriver(client, ddl)).rejects.toThrow(/no such module/);
+
+      const nextDriver = await getNextDriver(client, ddl, (scratch) => {
+        registerFactoryModule(scratch as Database, "hook_module");
+      });
+      const rows = await nextDriver.query<{ k: string }>("SELECT k FROM kv");
+      expect(rows).toEqual([{ k: "a" }]);
     });
   });
 });

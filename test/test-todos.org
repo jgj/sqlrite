@@ -62,7 +62,7 @@
 
 * Future Features (SQLite Specific)
 ** TODO 0018_partial_index (FUTURE) | test creating partial/filtered index (SQLite specific WHERE clause)
-** TODO 0032_virtual_table_fts (FUTURE) | test creating a FTS virtual table (SQLite specific)
-** TODO 0033_virtual_table_other (FUTURE) | test creating other virtual tables (e.g., JSON1)
-** TODO 0040_full_text_search (FUTURE) | test basic full text search functionality after migration
+** DONE 0032_virtual_table_fts | test creating a FTS virtual table (FTS5: 0096-0102; flag-on behavior in test/fts5.test.ts)
+** DONE 0033_virtual_table_other | test creating other virtual tables (R*Tree: 0093, 0094; flag-on behavior in test/virtual-tables.test.ts)
+** DONE 0040_full_text_search | test basic full text search functionality after migration (test/fts5.test.ts)
 ** TODO 0041_json_operations (FUTURE) | test basic JSON operations after enabling JSON1 extension (if needed)

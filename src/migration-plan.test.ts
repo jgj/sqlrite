@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Modified, SchemaDiff } from "./compare/types";
-import type { Column } from "./introspection-result";
+import type { Column, Table, View, VirtualTable } from "./introspection-result";
+import type { MigrationOperation } from "./migration-operation";
 import { createMigrationPlan } from "./migration-plan";
 import { get } from "./test-utils";
+import { registerVirtualTableModule } from "./virtual-tables/registry";
+import type { VirtualTableModule } from "./virtual-tables/types";
 
 // Helper function to create minimal schema diff
 function createEmptySchemaDiff(): SchemaDiff {
@@ -14,6 +17,7 @@ function createEmptySchemaDiff(): SchemaDiff {
     primary_key: { added: [], removed: [], modified: [] },
     trigger: { added: [], removed: [], modified: [] },
     view: { added: [], removed: [], modified: [] },
+    virtual_table: { added: [], removed: [], modified: [] },
     current: {
       tables: [],
       columns: [],
@@ -22,6 +26,7 @@ function createEmptySchemaDiff(): SchemaDiff {
       foreign_keys: [],
       triggers: [],
       views: [],
+      virtual_tables: [],
     },
     desired: {
       tables: [],
@@ -31,6 +36,7 @@ function createEmptySchemaDiff(): SchemaDiff {
       foreign_keys: [],
       triggers: [],
       views: [],
+      virtual_tables: [],
     },
   };
 }
@@ -1880,6 +1886,515 @@ describe("createMigrationPlan", () => {
       const sqlDiffReason = recreate?.reasons?.find((r) => r.check === "table.sql_diff");
       expect(sqlDiffReason?.detail).toContain("CHECK (id > 0)");
       expect(sqlDiffReason?.detail).toContain("CHECK (id >= 0)");
+    });
+  });
+
+  describe("Virtual table operations", () => {
+    // Test-only modules. "plan_test_dep(<table>)" reads from <table>: it asks
+    // for a rebuild when <table> is recreated and a recreate when it is
+    // renamed. "plan_test_norebuild" asks for a rebuild but cannot do one.
+    // "plan_test_renamable" supports ALTER TABLE ... RENAME.
+    const depModule: VirtualTableModule<string> = {
+      name: "plan_test_dep",
+      parseArgs: (args) => args.trim(),
+      diff: (a, b) => (a === b ? [] : [{ check: "dep.args", detail: `${a} → ${b}` }]),
+      supportsRename: true,
+      dependencies: (_vt, args) => [args],
+      recreate: () => [],
+      rebuild: () => [],
+      onDependencyChanged: ({ change }) => (change === "recreated" ? "rebuild" : "recreate"),
+      warnings: () => [],
+    };
+    registerVirtualTableModule(depModule);
+    registerVirtualTableModule({
+      ...depModule,
+      name: "plan_test_norebuild",
+      rebuild: undefined,
+      onDependencyChanged: () => "rebuild",
+    });
+    registerVirtualTableModule({
+      ...depModule,
+      name: "plan_test_renamable",
+      dependencies: () => [],
+      onDependencyChanged: undefined,
+    });
+
+    function vtable(name: string, module: string, args: string): VirtualTable {
+      return {
+        type: "virtual_table",
+        name,
+        module,
+        args,
+        sql: `CREATE VIRTUAL TABLE ${name} USING ${module}(${args})`,
+      };
+    }
+
+    function table(name: string, sql: string): Table {
+      return { type: "table", name, sql, views: [], num_cols: 1 };
+    }
+
+    // A modified table whose CHECK constraint changed, which forces a recreate
+    function recreatedTable(diff: SchemaDiff, name: string) {
+      diff.table.modified.push({
+        current: table(name, `CREATE TABLE ${name} (id INTEGER PRIMARY KEY, CHECK (id > 0))`),
+        desired: table(name, `CREATE TABLE ${name} (id INTEGER PRIMARY KEY, CHECK (id >= 0))`),
+        changes: ["sql"],
+      });
+    }
+
+    function view(name: string, tables: string[]): View {
+      return { type: "view", name, sql: `CREATE VIEW ${name} AS SELECT 1`, tables };
+    }
+
+    const rt = vtable("rt", "rtree", "id, minX, maxX");
+    const rt2 = vtable("rt", "rtree", "id, minX, maxX, minY, maxY");
+
+    describe("with manageVirtualTables off", () => {
+      it("emits no virtual table operations for any virtual table difference", () => {
+        const diff = createEmptySchemaDiff();
+        diff.virtual_table.added = [vtable("added", "rtree", "id, a, b")];
+        diff.virtual_table.removed = [vtable("removed", "rtree", "id, a, b")];
+        diff.virtual_table.modified = [{ current: rt, desired: rt2, changes: ["args"] }];
+
+        expect(createMigrationPlan(diff)).toEqual([]);
+        expect(createMigrationPlan(diff, { ignoreTableDeletion: true })).toEqual([]);
+      });
+
+      it("ignores a view whose only difference is the virtual tables it resolves to", () => {
+        const diff = createEmptySchemaDiff();
+        // The desired schema declares the view but not the virtual table it reads
+        diff.current.virtual_tables = [rt];
+        diff.view.modified = [
+          { current: view("rv", ["rt"]), desired: view("rv", []), changes: ["tables"] },
+        ];
+
+        expect(createMigrationPlan(diff)).toEqual([]);
+      });
+
+      it("still recreates a view whose base tables or SQL changed", () => {
+        const diff = createEmptySchemaDiff();
+        diff.current.virtual_tables = [rt];
+        diff.view.modified = [
+          { current: view("a", ["rt", "t"]), desired: view("a", []), changes: ["tables"] },
+          { current: view("b", ["rt"]), desired: view("b", []), changes: ["sql", "tables"] },
+        ];
+
+        expect(
+          createMigrationPlan(diff).map((op) => `${op.type}:${(op.target ?? op.current)?.name}`),
+        ).toEqual(["drop:a", "drop:b", "create:a", "create:b"]);
+      });
+
+      it("does not react to dependency changes", () => {
+        const diff = createEmptySchemaDiff();
+        const dep = vtable("dep", "plan_test_dep", "docs");
+        diff.current.virtual_tables = [dep];
+        diff.desired.virtual_tables = [dep];
+        recreatedTable(diff, "docs");
+
+        const plan = createMigrationPlan(diff);
+        expect(plan.map((op) => op.type)).toEqual(["recreate"]);
+        expect(plan[0]?.current?.type).toBe("table");
+      });
+    });
+
+    describe("with manageVirtualTables on", () => {
+      const options = { manageVirtualTables: true };
+
+      it("creates added virtual tables", () => {
+        const diff = createEmptySchemaDiff();
+        diff.virtual_table.added = [rt];
+
+        expect(createMigrationPlan(diff, options)).toEqual([{ type: "create", target: rt }]);
+      });
+
+      it("drops removed virtual tables", () => {
+        const diff = createEmptySchemaDiff();
+        diff.virtual_table.removed = [rt];
+
+        expect(createMigrationPlan(diff, options)).toEqual([{ type: "drop", current: rt }]);
+      });
+
+      it("recreates modified virtual tables with the handler's reasons", () => {
+        const diff = createEmptySchemaDiff();
+        diff.virtual_table.modified = [{ current: rt, desired: rt2, changes: ["args"] }];
+
+        expect(createMigrationPlan(diff, options)).toEqual([
+          {
+            type: "recreate",
+            current: rt,
+            target: rt2,
+            reasons: [
+              {
+                check: "virtual_table.args",
+                detail: "Module arguments changed: (id, minX, maxX) → (id, minX, maxX, minY, maxY)",
+              },
+            ],
+          },
+        ]);
+      });
+
+      it("uses DROP + CREATE for a name change when the module does not support rename", () => {
+        const diff = createEmptySchemaDiff();
+        const renamed = vtable("rt_new", "rtree", "id, minX, maxX");
+        diff.virtual_table.removed = [rt];
+        diff.virtual_table.added = [renamed];
+
+        const plan = createMigrationPlan(diff, options);
+        expect(plan).toEqual([
+          { type: "drop", current: rt },
+          { type: "create", target: renamed },
+        ]);
+      });
+
+      it("renames when the module supports it and the definitions are equivalent", () => {
+        const diff = createEmptySchemaDiff();
+        const before = vtable("before", "plan_test_renamable", "x");
+        const after = vtable("after", "PLAN_TEST_RENAMABLE", "  x ");
+        diff.virtual_table.removed = [before];
+        diff.virtual_table.added = [after];
+
+        expect(createMigrationPlan(diff, options)).toEqual([
+          { type: "rename", current: before, target: after },
+        ]);
+      });
+
+      it("does not rename when the definitions differ", () => {
+        const diff = createEmptySchemaDiff();
+        const before = vtable("before", "plan_test_renamable", "x");
+        const after = vtable("after", "plan_test_renamable", "y");
+        diff.virtual_table.removed = [before];
+        diff.virtual_table.added = [after];
+
+        expect(createMigrationPlan(diff, options).map((op) => op.type)).toEqual(["drop", "create"]);
+      });
+
+      it("renames an FTS5 table whose definition is only cosmetically different", () => {
+        const diff = createEmptySchemaDiff();
+        const before = vtable("notes", "fts5", "title, body, tokenize=porter");
+        const after = vtable("notes2", "FTS5", `"title", [body], TOKENIZE='porter unicode61'`);
+        diff.virtual_table.removed = [before];
+        diff.virtual_table.added = [after];
+
+        expect(createMigrationPlan(diff, options)).toEqual([
+          { type: "rename", current: before, target: after },
+        ]);
+      });
+
+      it("does not rename a virtual table its handler says cannot be renamed", () => {
+        // ALTER TABLE ... RENAME leaves an FTS5 contentless_unindexed table's
+        // %_content shadow table behind
+        const diff = createEmptySchemaDiff();
+        const args = "a, b UNINDEXED, content='', contentless_unindexed=1";
+        const before = vtable("before", "fts5", args);
+        const after = vtable("after", "fts5", args);
+        diff.virtual_table.removed = [before];
+        diff.virtual_table.added = [after];
+
+        expect(createMigrationPlan(diff, options)).toEqual([
+          { type: "drop", current: before },
+          { type: "create", target: after },
+        ]);
+      });
+
+      it("pairs each removed virtual table with at most one rename target", () => {
+        const diff = createEmptySchemaDiff();
+        const a = vtable("a", "plan_test_renamable", "x");
+        const b = vtable("b", "plan_test_renamable", "x");
+        const c = vtable("c", "plan_test_renamable", "x");
+        diff.virtual_table.removed = [a];
+        diff.virtual_table.added = [b, c];
+
+        expect(createMigrationPlan(diff, options)).toEqual([
+          { type: "rename", current: a, target: b },
+          { type: "create", target: c },
+        ]);
+      });
+
+      it("orders virtual table drops before table changes and creates after column changes", () => {
+        const diff = createEmptySchemaDiff();
+        recreatedTable(diff, "docs");
+        diff.index.removed = [
+          {
+            type: "index",
+            name: "old_idx",
+            table: "other",
+            columns: ["a"],
+            unique: false,
+            sql: null,
+          },
+        ];
+        diff.index.added = [
+          {
+            type: "index",
+            name: "new_idx",
+            table: "other",
+            columns: ["b"],
+            unique: false,
+            sql: null,
+          },
+        ];
+        diff.trigger.added = [
+          { type: "trigger", name: "trg", table: "other", sql: "CREATE TRIGGER trg ..." },
+        ];
+        diff.view.added = [view("v_new", ["other"])];
+        diff.virtual_table.removed = [vtable("gone", "rtree", "id, a, b")];
+        diff.virtual_table.added = [vtable("fresh", "rtree", "id, a, b")];
+        diff.virtual_table.modified = [{ current: rt, desired: rt2, changes: ["args"] }];
+
+        const plan = createMigrationPlan(diff, options);
+        const describe = (op: MigrationOperation) =>
+          `${op.type}:${(op.current ?? op.target)?.type}:${(op.target ?? op.current)?.name}`;
+
+        expect(plan.map(describe)).toEqual([
+          "drop:index:old_idx",
+          "drop:virtual_table:gone",
+          "recreate:table:docs",
+          "create:virtual_table:fresh",
+          "recreate:virtual_table:rt",
+          "create:index:new_idx",
+          "create:trigger:trg",
+          "create:view:v_new",
+        ]);
+      });
+
+      it("recreates a view whose virtual table is dropped", () => {
+        const diff = createEmptySchemaDiff();
+        diff.current.virtual_tables = [rt];
+        diff.virtual_table.removed = [rt];
+        diff.view.modified = [
+          { current: view("rv", ["rt"]), desired: view("rv", []), changes: ["tables"] },
+        ];
+
+        expect(
+          createMigrationPlan(diff, options).map(
+            (op) => `${op.type}:${(op.target ?? op.current)?.name}`,
+          ),
+        ).toEqual(["drop:rv", "drop:rt", "create:rv"]);
+      });
+
+      it("leaves views that depend on a recreated virtual table to the recreate", () => {
+        const diff = createEmptySchemaDiff();
+        diff.virtual_table.modified = [{ current: rt, desired: rt2, changes: ["args"] }];
+        diff.view.modified = [
+          { current: view("rv", ["rt"]), desired: view("rv", ["rt"]), changes: ["sql"] },
+        ];
+
+        const plan = createMigrationPlan(diff, options);
+        expect(plan.map((op) => op.type)).toEqual(["recreate"]);
+      });
+
+      describe("ignoreTableDeletion", () => {
+        it("keeps virtual tables missing from the desired schema", () => {
+          const diff = createEmptySchemaDiff();
+          diff.virtual_table.removed = [rt];
+
+          expect(createMigrationPlan(diff, { ...options, ignoreTableDeletion: true })).toEqual([]);
+        });
+
+        it("keeps the views that depend on them", () => {
+          const diff = createEmptySchemaDiff();
+          diff.virtual_table.removed = [rt];
+          diff.view.removed = [view("rv", ["rt"])];
+
+          expect(createMigrationPlan(diff, { ...options, ignoreTableDeletion: true })).toEqual([]);
+        });
+
+        it("still renames when a drop+create pair resolves to a rename", () => {
+          const diff = createEmptySchemaDiff();
+          const before = vtable("before", "plan_test_renamable", "x");
+          const after = vtable("after", "plan_test_renamable", "x");
+          diff.virtual_table.removed = [before];
+          diff.virtual_table.added = [after];
+
+          expect(createMigrationPlan(diff, { ...options, ignoreTableDeletion: true })).toEqual([
+            { type: "rename", current: before, target: after },
+          ]);
+        });
+      });
+
+      describe("dependency reactions", () => {
+        it("rebuilds a virtual table after the table it reads from is recreated", () => {
+          const diff = createEmptySchemaDiff();
+          const dep = vtable("dep", "plan_test_dep", "docs");
+          diff.current.virtual_tables = [dep];
+          diff.desired.virtual_tables = [dep];
+          recreatedTable(diff, "docs");
+
+          const plan = createMigrationPlan(diff, options);
+          expect(plan.map((op) => op.type)).toEqual(["recreate", "rebuild"]);
+          expect(plan[1]).toEqual({
+            type: "rebuild",
+            target: dep,
+            reasons: [
+              {
+                check: "virtual_table.dependency_recreated",
+                detail: 'Table "docs" read by virtual table "dep" is recreated',
+              },
+            ],
+          });
+        });
+
+        it("matches dependency names case-insensitively", () => {
+          const diff = createEmptySchemaDiff();
+          const dep = vtable("dep", "plan_test_dep", "DOCS");
+          diff.current.virtual_tables = [dep];
+          diff.desired.virtual_tables = [dep];
+          recreatedTable(diff, "docs");
+
+          expect(createMigrationPlan(diff, options).map((op) => op.type)).toEqual([
+            "recreate",
+            "rebuild",
+          ]);
+        });
+
+        it("recreates a virtual table after the table it reads from is renamed", () => {
+          const diff = createEmptySchemaDiff();
+          const current = vtable("dep", "plan_test_dep", "docs");
+          const target = vtable("dep", "plan_test_dep", "docs");
+          diff.current.virtual_tables = [current];
+          diff.desired.virtual_tables = [target];
+          diff.table.removed = [table("docs", "CREATE TABLE docs (id INTEGER PRIMARY KEY)")];
+          diff.table.added = [
+            table("documents", "CREATE TABLE documents (id INTEGER PRIMARY KEY)"),
+          ];
+
+          const plan = createMigrationPlan(diff, options);
+          expect(plan.map((op) => op.type)).toEqual(["rename", "recreate"]);
+          expect(plan[1]).toEqual({
+            type: "recreate",
+            current,
+            target,
+            reasons: [expect.objectContaining({ check: "virtual_table.dependency_renamed" })],
+          });
+        });
+
+        it("does not also rebuild a virtual table that is already recreated or created", () => {
+          const diff = createEmptySchemaDiff();
+          const current = vtable("dep", "plan_test_dep", "docs");
+          const target = vtable("dep", "plan_test_dep", "other");
+          const fresh = vtable("fresh", "plan_test_dep", "docs");
+          diff.current.virtual_tables = [current];
+          diff.desired.virtual_tables = [target, fresh];
+          diff.virtual_table.modified = [{ current, desired: target, changes: ["args"] }];
+          diff.virtual_table.added = [fresh];
+          recreatedTable(diff, "docs");
+          recreatedTable(diff, "other");
+
+          const plan = createMigrationPlan(diff, options);
+          expect(plan.filter((op) => op.type === "rebuild")).toEqual([]);
+          expect(plan.filter((op) => op.current?.type === "virtual_table")).toHaveLength(1);
+        });
+
+        it("falls back to a recreate when the handler cannot rebuild", () => {
+          const diff = createEmptySchemaDiff();
+          const dep = vtable("dep", "plan_test_norebuild", "docs");
+          diff.current.virtual_tables = [dep];
+          diff.desired.virtual_tables = [dep];
+          recreatedTable(diff, "docs");
+
+          const plan = createMigrationPlan(diff, options);
+          expect(plan.map((op) => op.type)).toEqual(["recreate", "recreate"]);
+          expect(plan[1]?.current?.type).toBe("virtual_table");
+        });
+
+        it("turns a pending rename into a recreate from the old name", () => {
+          const diff = createEmptySchemaDiff();
+          const before = vtable("before", "plan_test_dep", "docs");
+          const after = vtable("after", "plan_test_dep", "docs");
+          diff.current.virtual_tables = [before];
+          diff.desired.virtual_tables = [after];
+          diff.virtual_table.removed = [before];
+          diff.virtual_table.added = [after];
+          diff.table.removed = [table("docs", "CREATE TABLE docs (id INTEGER PRIMARY KEY)")];
+          diff.table.added = [table("docs2", "CREATE TABLE docs2 (id INTEGER PRIMARY KEY)")];
+
+          const plan = createMigrationPlan(diff, options);
+          expect(plan.filter((op) => op.current?.type === "virtual_table")).toEqual([
+            {
+              type: "recreate",
+              current: before,
+              target: after,
+              reasons: [expect.objectContaining({ check: "virtual_table.dependency_renamed" })],
+            },
+          ]);
+        });
+
+        it("ignores virtual tables whose dependencies are unchanged", () => {
+          const diff = createEmptySchemaDiff();
+          const dep = vtable("dep", "plan_test_dep", "docs");
+          diff.current.virtual_tables = [dep];
+          diff.desired.virtual_tables = [dep];
+          recreatedTable(diff, "unrelated");
+
+          expect(createMigrationPlan(diff, options).map((op) => op.type)).toEqual(["recreate"]);
+        });
+      });
+
+      // The rows are read through the content view before anything changes
+      it("splits an FTS5 recreate that reads its rows through its content view", () => {
+        const diff = createEmptySchemaDiff();
+        const current = vtable("docs", "fts5", "title, content=recent, content_rowid=id");
+        const desired = vtable("docs", "fts5", "title");
+        diff.current.virtual_tables = [current];
+        diff.desired.virtual_tables = [desired];
+        diff.desired.views = [view("recent", ["src"])];
+        diff.virtual_table.modified = [{ current, desired, changes: ["args"] }];
+        recreatedTable(diff, "src");
+
+        const plan = createMigrationPlan(diff, options);
+        expect(plan.map((op) => `${op.type}:${(op.target ?? op.current)?.name}`)).toEqual([
+          "recreate:docs",
+          "recreate:src",
+          "recreate:docs",
+        ]);
+        expect(plan[0]).toMatchObject({ step: "drop", current, target: desired });
+        expect(plan[2]).toMatchObject({ step: "create", current, target: desired });
+      });
+
+      describe("renames the shadow tables of a virtual table along with it", () => {
+        const fts = (name: string) => vtable(name, "fts5", "body");
+        const names = (plan: MigrationOperation[]) =>
+          plan.map((op) => `${op.type}:${op.current?.name}->${op.target?.name}`);
+
+        it("dropping a table that holds one of the new names first", () => {
+          const diff = createEmptySchemaDiff();
+          diff.virtual_table.removed = [fts("a")];
+          diff.virtual_table.added = [fts("b")];
+          diff.table.removed = [table("b_data", "CREATE TABLE b_data (x)")];
+
+          expect(names(createMigrationPlan(diff, options))).toEqual([
+            "drop:b_data->undefined",
+            "rename:a->b",
+          ]);
+        });
+
+        it("renaming a table into one of the current names after it", () => {
+          const diff = createEmptySchemaDiff();
+          diff.virtual_table.removed = [fts("a")];
+          diff.virtual_table.added = [fts("b")];
+          diff.table.removed = [table("a_meta", "CREATE TABLE a_meta (k, v)")];
+          diff.table.added = [table("a_config", "CREATE TABLE a_config (k, v)")];
+
+          expect(names(createMigrationPlan(diff, options))).toEqual([
+            "rename:a->b",
+            "rename:a_meta->a_config",
+          ]);
+        });
+
+        it.each([
+          ["a", "a_data"],
+          ["a_data", "a"],
+        ])("through a temporary name when %s becomes %s", (from, to) => {
+          const diff = createEmptySchemaDiff();
+          diff.virtual_table.removed = [fts(from)];
+          diff.virtual_table.added = [fts(to)];
+
+          expect(names(createMigrationPlan(diff, options))).toEqual([
+            `rename:${from}->sqlrite_rename_${to}`,
+            `rename:sqlrite_rename_${to}->${to}`,
+          ]);
+        });
+      });
     });
   });
 });

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { generateDDL } from "./generate-ddl";
 import type { IntrospectionResult } from "./introspection-result";
-import type { Column, Index, Table, Trigger, View } from "./introspection-result";
+import type { Column, Index, Table, Trigger, View, VirtualTable } from "./introspection-result";
 import type { MigrationPlan } from "./migration-plan";
+import { registerVirtualTableModule } from "./virtual-tables/registry";
 
 describe("generateDDL", () => {
   // Helper to create a minimal introspection result object
@@ -18,6 +19,7 @@ describe("generateDDL", () => {
       primary_keys: [],
       triggers: [],
       views: [],
+      virtual_tables: [],
     };
   }
 
@@ -999,6 +1001,231 @@ describe("generateDDL", () => {
       expect(ddl).toContain('DROP TABLE "users";');
       expect(ddl).toContain('ALTER TABLE "temp_users" RENAME TO "users";');
       expect(ddl.every((stmt) => !stmt.includes("INSERT INTO"))).toBe(true);
+    });
+  });
+
+  describe("virtual table operations", () => {
+    // Test-only module with a custom drop and a rebuild
+    registerVirtualTableModule<string>({
+      name: "ddl_test_module",
+      parseArgs: (args) => args.trim(),
+      diff: () => [],
+      supportsRename: true,
+      dependencies: () => [],
+      recreate: ({ current, target, currentArgs, targetArgs }) => [
+        `-- recreate ${current.name}(${currentArgs}) as ${target.name}(${targetArgs})`,
+      ],
+      drop: (current, args) => [`-- drop ${current.name}(${args})`],
+      rebuild: ({ target, args }) => [`-- rebuild ${target.name}(${args})`],
+      warnings: () => [],
+    });
+
+    function vtable(name: string, module: string, args: string): VirtualTable {
+      return {
+        type: "virtual_table",
+        name,
+        module,
+        args,
+        sql: `CREATE VIRTUAL TABLE ${name} USING ${module}(${args})`,
+      };
+    }
+
+    function view(name: string, sqlText: string, tables: string[]): View {
+      return { type: "view", name, sql: sqlText, tables };
+    }
+
+    const rt = vtable("rt", "rtree", "id, minX, maxX");
+    const rt2 = vtable("rt", "rtree", "id, minX, maxX, minY, maxY");
+
+    it("creates a virtual table from its SQL", () => {
+      const ddl = generateDDL(
+        [{ type: "create", target: rt }],
+        createEmptyIntrospection(),
+        createEmptyIntrospection(),
+      );
+      expect(ddl).toEqual(["CREATE VIRTUAL TABLE rt USING rtree(id, minX, maxX);"]);
+    });
+
+    it("drops a virtual table", () => {
+      const ddl = generateDDL(
+        [{ type: "drop", current: rt }],
+        createEmptyIntrospection(),
+        createEmptyIntrospection(),
+      );
+      expect(ddl).toEqual(['DROP TABLE IF EXISTS "rt";']);
+    });
+
+    it("uses the handler's drop when it has one", () => {
+      const ddl = generateDDL(
+        [{ type: "drop", current: vtable("x", "ddl_test_module", " a ") }],
+        createEmptyIntrospection(),
+        createEmptyIntrospection(),
+      );
+      expect(ddl).toEqual(["-- drop x(a)"]);
+    });
+
+    it("renames a virtual table", () => {
+      const ddl = generateDDL(
+        [
+          {
+            type: "rename",
+            current: vtable("old", "ddl_test_module", "a"),
+            target: vtable("new", "ddl_test_module", "a"),
+          },
+        ],
+        createEmptyIntrospection(),
+        createEmptyIntrospection(),
+      );
+      expect(ddl).toEqual(['ALTER TABLE "old" RENAME TO "new";']);
+    });
+
+    it("recreates with the default handler: DROP + CREATE", () => {
+      const ddl = generateDDL(
+        [{ type: "recreate", current: rt, target: rt2, reasons: [] }],
+        createIntrospection({ virtual_tables: [rt] }),
+        createIntrospection({ virtual_tables: [rt2] }),
+      );
+      expect(ddl).toEqual([
+        'DROP TABLE IF EXISTS "rt";',
+        "CREATE VIRTUAL TABLE rt USING rtree(id, minX, maxX, minY, maxY);",
+      ]);
+    });
+
+    it("delegates the recreate to the module handler with parsed args", () => {
+      const ddl = generateDDL(
+        [
+          {
+            type: "recreate",
+            current: vtable("x", "ddl_test_module", " a "),
+            target: vtable("x", "ddl_test_module", " b "),
+            reasons: [],
+          },
+        ],
+        createEmptyIntrospection(),
+        createEmptyIntrospection(),
+      );
+      expect(ddl).toEqual(["-- recreate x(a) as x(b)"]);
+    });
+
+    it("recreates with the current module's drop and the new module's create when the module changes", () => {
+      const current = vtable("x", "ddl_test_module", "a");
+      const target = vtable("x", "rtree", "id, a, b");
+      const ddl = generateDDL(
+        [{ type: "recreate", current, target, reasons: [] }],
+        createEmptyIntrospection(),
+        createEmptyIntrospection(),
+      );
+      expect(ddl).toEqual(["-- drop x(a)", "CREATE VIRTUAL TABLE x USING rtree(id, a, b);"]);
+
+      // The new module's create: an external-content FTS5 index is rebuilt
+      const fts5 = vtable("x", "fts5", "title, content=docs");
+      expect(
+        generateDDL(
+          [
+            {
+              type: "recreate",
+              current: vtable("x", "rtree", "id, a, b"),
+              target: fts5,
+              reasons: [],
+            },
+          ],
+          createEmptyIntrospection(),
+          createEmptyIntrospection(),
+        ),
+      ).toEqual([
+        'DROP TABLE IF EXISTS "x";',
+        "CREATE VIRTUAL TABLE x USING fts5(title, content=docs);",
+        `INSERT INTO "x"("x") SELECT 'rebuild' WHERE (SELECT count(DISTINCT lower(name)) FROM pragma_table_xinfo('docs', 'main') WHERE hidden <> 1 AND lower(name) IN ('title')) = 1 AND (EXISTS (SELECT 1 FROM pragma_table_list('docs') WHERE schema = 'main' AND type IN ('table', 'shadow') AND wr = 0) OR EXISTS (SELECT 1 FROM pragma_table_xinfo('docs', 'main') WHERE hidden <> 1 AND lower(name) = 'rowid'));`,
+      ]);
+    });
+
+    it("drops dependent views before a recreate and restores the desired ones after", () => {
+      const currentView = view("rv", "CREATE VIEW rv AS SELECT id FROM rt", ["rt"]);
+      const removedView = view("old_rv", "CREATE VIEW old_rv AS SELECT id FROM rt", ["rt"]);
+      const desiredView = view("rv", "CREATE VIEW rv AS SELECT id, minX FROM rt", ["rt"]);
+      const unrelated = view("other", "CREATE VIEW other AS SELECT 1", []);
+
+      const ddl = generateDDL(
+        [{ type: "recreate", current: rt, target: rt2, reasons: [] }],
+        createIntrospection({ virtual_tables: [rt], views: [currentView, removedView, unrelated] }),
+        createIntrospection({ virtual_tables: [rt2], views: [desiredView, unrelated] }),
+      );
+
+      expect(ddl).toEqual([
+        'DROP VIEW IF EXISTS "rv";',
+        'DROP VIEW IF EXISTS "old_rv";',
+        'DROP TABLE IF EXISTS "rt";',
+        "CREATE VIRTUAL TABLE rt USING rtree(id, minX, maxX, minY, maxY);",
+        "CREATE VIEW rv AS SELECT id, minX FROM rt;",
+      ]);
+    });
+
+    it("delegates a rebuild to the module handler", () => {
+      const ddl = generateDDL(
+        [{ type: "rebuild", target: vtable("x", "ddl_test_module", " a "), reasons: [] }],
+        createEmptyIntrospection(),
+        createEmptyIntrospection(),
+      );
+      expect(ddl).toEqual(["-- rebuild x(a)"]);
+    });
+
+    it("reports an error for a rebuild of a module that cannot rebuild", () => {
+      const ddl = generateDDL(
+        [{ type: "rebuild", target: rt, reasons: [] }],
+        createEmptyIntrospection(),
+        createEmptyIntrospection(),
+      );
+      expect(ddl).toHaveLength(1);
+      expect(ddl[0]).toMatch(/^-- Error generating DDL: .*cannot rebuild/);
+    });
+
+    it("uses the handler's create when it has one", () => {
+      const ext = vtable("f", "fts5", "title, content=docs");
+      const ddl = generateDDL(
+        [{ type: "create", target: ext }],
+        createEmptyIntrospection(),
+        createEmptyIntrospection(),
+      );
+      expect(ddl).toEqual([
+        "CREATE VIRTUAL TABLE f USING fts5(title, content=docs);",
+        `INSERT INTO "f"("f") SELECT 'rebuild' WHERE (SELECT count(DISTINCT lower(name)) FROM pragma_table_xinfo('docs', 'main') WHERE hidden <> 1 AND lower(name) IN ('title')) = 1 AND (EXISTS (SELECT 1 FROM pragma_table_list('docs') WHERE schema = 'main' AND type IN ('table', 'shadow') AND wr = 0) OR EXISTS (SELECT 1 FROM pragma_table_xinfo('docs', 'main') WHERE hidden <> 1 AND lower(name) = 'rowid'));`,
+      ]);
+    });
+
+    it("gives the handler's recreate the desired schema", () => {
+      // An FTS5 table that used external content copies its rows from the
+      // content table only when the desired schema still has it
+      const current = vtable("f", "fts5", "title, content=docs");
+      const target = vtable("f", "fts5", "title");
+      const docs: Table = {
+        type: "table",
+        name: "docs",
+        sql: "CREATE TABLE docs (title TEXT)",
+        views: [],
+        num_cols: 1,
+      };
+      const docsTitle: Column = {
+        type: "column",
+        table: "docs",
+        name: "title",
+        data_type: "text",
+        ordinal_position: 0,
+        nullable: true,
+        character_maximum_length: null,
+        precision: null,
+        default: "",
+        check_constraint: null,
+        autoincrement: false,
+        generated: "none",
+      };
+      const plan: MigrationPlan = [{ type: "recreate", current, target, reasons: [] }];
+      const copy = `INSERT INTO "f"(rowid, "title") SELECT "rowid", "title" FROM "docs";`;
+
+      const withDocs = createIntrospection({ tables: [docs], columns: [docsTitle] });
+      expect(generateDDL(plan, createEmptyIntrospection(), withDocs)).toContain(copy);
+      expect(
+        generateDDL(plan, createEmptyIntrospection(), createEmptyIntrospection()),
+      ).not.toContain(copy);
     });
   });
 });

@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync, DatabaseSyncOptions } from "node:sqlite";
 import type { Client } from "@libsql/client";
 import type { Database } from "better-sqlite3";
 
@@ -22,9 +22,10 @@ export function isBetterSqlite3Database(sqlite: SQLite): sqlite is Database {
   return "prepare" in sqlite && "transaction" in sqlite;
 }
 
-export async function getNodeSqliteDatabase() {
+export async function getNodeSqliteDatabase(options?: DatabaseSyncOptions) {
   const { DatabaseSync } = await import("node:sqlite");
-  return new DatabaseSync(":memory:");
+  // DatabaseSync rejects an explicit undefined options argument
+  return options ? new DatabaseSync(":memory:", options) : new DatabaseSync(":memory:");
 }
 
 export function isNodeSqliteDatabase(sqlite: SQLite): sqlite is DatabaseSync {

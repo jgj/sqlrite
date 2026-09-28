@@ -1,4 +1,5 @@
 import { type } from "arktype";
+import { parseCreateVirtualTable } from "./virtual-tables/parse";
 
 const boolString = type("boolean|'true'|'false'").pipe((val) => {
   if (typeof val === "boolean") return val;
@@ -99,6 +100,18 @@ const view = type({
 
 export type View = typeof view.infer;
 
+// module and args are derived from the stored CREATE VIRTUAL TABLE statement
+const virtual_table = type({
+  type: '"virtual_table"',
+  name: "string",
+  sql: "string",
+}).pipe((vt) => {
+  const { module, args } = parseCreateVirtualTable(vt.sql);
+  return { ...vt, module, args };
+});
+
+export type VirtualTable = typeof virtual_table.infer;
+
 const schema = type({
   tables: table.array(),
   columns: column.array(),
@@ -107,12 +120,21 @@ const schema = type({
   primary_keys: primary_key.array(),
   triggers: trigger.array(),
   views: view.array(),
+  virtual_tables: virtual_table.array(),
 });
 
 export type IntrospectionResult = typeof schema.infer;
 export type IntrospectionResultInput = typeof schema.inferIn;
 
-export type IntrospectionObject = Table | Column | Index | ForeignKey | PrimaryKey | Trigger | View;
+export type IntrospectionObject =
+  | Table
+  | Column
+  | Index
+  | ForeignKey
+  | PrimaryKey
+  | Trigger
+  | View
+  | VirtualTable;
 export type IntrospectionObjectType = IntrospectionObject["type"];
 
 export function parseIntrospectionResult(data: unknown) {

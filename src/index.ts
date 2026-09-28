@@ -8,7 +8,9 @@ export type {
   CreateOperation,
   DropOperation,
   MigrationOperation,
+  RebuildOperation,
   RecreateOperation,
   RecreateReason,
   RenameOperation,
+  VirtualTableRecreateOperation,
 } from "./migration-operation";

@@ -91,6 +91,15 @@ describe("parseIntrospectionResult", () => {
         tables: [],
       },
     ],
+    virtual_tables: [
+      {
+        type: "virtual_table",
+        name: "users_fts",
+        sql: "CREATE VIRTUAL TABLE users_fts USING fts5(name, content='users', content_rowid='id')",
+        module: "fts5",
+        args: "name, content='users', content_rowid='id'",
+      },
+    ],
   };
 
   it("should parse valid JSON string input", () => {
@@ -205,6 +214,35 @@ describe("parseIntrospectionResult", () => {
       precision: 10,
       scale: 2,
     });
+  });
+
+  it("derives module and args of virtual tables from their SQL", () => {
+    const result = parseIntrospectionResult({
+      ...validData,
+      virtual_tables: [
+        {
+          type: "virtual_table",
+          name: "b1",
+          sql: 'CREATE VIRTUAL TABLE "b1"   using   FTS5 ( title , body )',
+        },
+      ],
+    });
+
+    expect(result.virtual_tables).toEqual([
+      {
+        type: "virtual_table",
+        name: "b1",
+        sql: 'CREATE VIRTUAL TABLE "b1"   using   FTS5 ( title , body )',
+        module: "FTS5",
+        args: " title , body ",
+      },
+    ]);
+  });
+
+  it("should throw when virtual_tables is missing", () => {
+    const { virtual_tables: _omitted, ...withoutVirtualTables } = validData;
+
+    expect(() => parseIntrospectionResult(withoutVirtualTables)).toThrow();
   });
 
   it("should validate all array items in complex objects", () => {

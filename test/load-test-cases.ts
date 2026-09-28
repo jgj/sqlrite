@@ -5,6 +5,8 @@ export interface TestCase {
   filename: string;
   description: string;
   exclusive?: boolean;
+  /** The case's schemas are equivalent: migrating must emit no statement at all */
+  expectNoStatements?: boolean;
   current: string;
   next: string;
 }
@@ -33,6 +35,7 @@ export async function loadTestCases(): Promise<TestCase[]> {
       filename: basename(file),
       description: module.description,
       exclusive: module.exclusive,
+      expectNoStatements: module.expectNoStatements === true,
       current: module.current,
       next: module.next,
     });

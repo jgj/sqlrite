@@ -27,6 +27,13 @@ describe("compareTables", () => {
     expect(result.modified).toHaveLength(0);
   });
 
+  it("treats a single-quoted table name like the double-quoted one a recreate stores", () => {
+    const current = [createTable("q", 'CREATE TABLE "q" (id INTEGER PRIMARY KEY, a TEXT)')];
+    const desired = [createTable("q", "CREATE TABLE 'q' (id INTEGER PRIMARY KEY, a TEXT)")];
+
+    expect(compareTables(current, desired).modified).toEqual([]);
+  });
+
   it("should detect removed tables", () => {
     const current: Table[] = [
       createTable("users", "CREATE TABLE users (id INT PRIMARY KEY)"),

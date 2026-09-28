@@ -119,6 +119,113 @@ describe("MigrationOptions", () => {
       expect(preview.statements.some((s) => /DROP TABLE.*legacy/i.test(s))).toBe(false);
     });
 
+    it("does not drop virtual tables when manageVirtualTables is on", async () => {
+      const driver = getDriver(client);
+      await driver.execute(`
+        CREATE VIRTUAL TABLE legacy_idx USING rtree(id, minX, maxX);
+        CREATE VIEW legacy_idx_view AS SELECT id FROM legacy_idx;
+      `);
+
+      const preview = await getMigrationPreview(client, "", {
+        ignoreTableDeletion: true,
+        manageVirtualTables: true,
+      });
+
+      expect(preview.statements).toEqual([]);
+      expect(preview.warnings).toEqual([]);
+    });
+
+    // A declared view that reads a kept (undeclared) table resolves to fewer
+    // tables in the desired schema; that alone must not recreate it
+    describe.each([
+      ["a table", "CREATE TABLE s (id INTEGER PRIMARY KEY, body TEXT);", {}],
+      [
+        "a virtual table",
+        "CREATE VIRTUAL TABLE s USING fts5(body);",
+        { manageVirtualTables: true },
+      ],
+    ])("a declared view over %s the desired schema omits", (_what, s, extra) => {
+      const options = { ignoreTableDeletion: true, ...extra };
+
+      it("is left alone", async () => {
+        const driver = getDriver(client);
+        await driver.execute(`${s}\nCREATE VIEW v AS SELECT body FROM s;`);
+        const next = "CREATE VIEW v AS SELECT body FROM s;";
+
+        const res = await migrate(client, next, options);
+        expect(res.success, res.err?.message).toBe(true);
+        expect(res.statements).toEqual([]);
+        expect((await getMigrationPreview(client, next, options)).statements).toEqual([]);
+      });
+
+      it("is recreated once with a recreated table it also reads", async () => {
+        const driver = getDriver(client);
+        await driver.execute(`
+          CREATE TABLE t (id INTEGER PRIMARY KEY, a TEXT);
+          ${s}
+          CREATE VIEW v AS SELECT t.id FROM t JOIN s ON s.rowid = t.id;
+        `);
+        const next = `
+          CREATE TABLE t (id INTEGER PRIMARY KEY, a TEXT NOT NULL);
+          CREATE VIEW v AS SELECT t.id FROM t JOIN s ON s.rowid = t.id;
+        `;
+
+        const res = await migrate(client, next, options);
+        expect(res.success, res.err?.message).toBe(true);
+        const again = await migrate(client, next, options);
+        expect(again.success, again.err?.message).toBe(true);
+        expect(again.statements).toEqual([]);
+      });
+
+      it("is still updated when its SQL changes", async () => {
+        const driver = getDriver(client);
+        await driver.execute(`${s}\nCREATE VIEW v AS SELECT body FROM s;`);
+        const next = "CREATE VIEW v AS SELECT body, 1 AS one FROM s;";
+
+        const res = await migrate(client, next, options);
+        expect(res.success, res.err?.message).toBe(true);
+        const columns = await driver.query<{ name: string }>(
+          "SELECT name FROM pragma_table_info('v')",
+        );
+        expect(columns.map((c) => c.name)).toEqual(["body", "one"]);
+        expect((await getMigrationPreview(client, next, options)).statements).toEqual([]);
+      });
+    });
+
+    // The view is kept (it reads a kept table), but the recreate of the other
+    // table it reads has to drop it and put it back as it was
+    describe.each([
+      ["a table", "CREATE TABLE s (id INTEGER PRIMARY KEY, body TEXT);", {}],
+      [
+        "a virtual table",
+        "CREATE VIRTUAL TABLE s USING fts5(body);",
+        { manageVirtualTables: true },
+      ],
+    ])("an undeclared view over %s the desired schema omits", (_what, s, extra) => {
+      const options = { ignoreTableDeletion: true, ...extra };
+
+      it("is kept when another table it reads is recreated", async () => {
+        const driver = getDriver(client);
+        const view = "CREATE VIEW v AS SELECT p.id, s.body FROM p JOIN s ON s.rowid = p.id";
+        await driver.execute(`
+          CREATE TABLE p (id INTEGER PRIMARY KEY, body TEXT);
+          ${s}
+          ${view};
+        `);
+        const next = "CREATE TABLE p (id INTEGER PRIMARY KEY, body TEXT NOT NULL);";
+
+        const res = await migrate(client, next, options);
+        expect(res.success, res.err?.message).toBe(true);
+        const views = await driver.query<{ sql: string }>(
+          "SELECT sql FROM sqlite_schema WHERE name = 'v'",
+        );
+        expect(views).toEqual([{ sql: view }]);
+        const again = await migrate(client, next, options);
+        expect(again.success, again.err?.message).toBe(true);
+        expect(again.statements).toEqual([]);
+      });
+    });
+
     it("default behavior (option unset) still drops orphan tables", async () => {
       const driver = getDriver(client);
       await driver.execute("CREATE TABLE legacy (id INTEGER PRIMARY KEY);");
@@ -127,6 +234,41 @@ describe("MigrationOptions", () => {
 
       expect(preview.statements.some((s) => /DROP TABLE.*legacy/i.test(s))).toBe(true);
       expect(preview.warnings.some((w) => w.type === "destructive")).toBe(true);
+    });
+  });
+
+  describe("manageVirtualTables", () => {
+    let client: SQLite;
+
+    beforeEach(async () => {
+      client = await getLibsqlClient();
+    });
+
+    afterEach(async () => {
+      if ("close" in client) {
+        await client.close();
+      }
+    });
+
+    const shapes = "CREATE VIRTUAL TABLE shapes USING rtree(id, minX, maxX);";
+
+    it("is off by default: virtual tables are neither created nor dropped", async () => {
+      const created = await getMigrationPreview(client, shapes);
+      expect(created.statements).toEqual([]);
+
+      await getDriver(client).execute(shapes);
+      const dropped = await getMigrationPreview(client, "");
+      expect(dropped.statements).toEqual([]);
+      expect(dropped.warnings).toEqual([]);
+    });
+
+    it("creates and drops virtual tables when enabled", async () => {
+      const created = await getMigrationPreview(client, shapes, { manageVirtualTables: true });
+      expect(created.statements).toEqual([shapes]);
+
+      await getDriver(client).execute(shapes);
+      const dropped = await getMigrationPreview(client, "", { manageVirtualTables: true });
+      expect(dropped.statements).toEqual(['DROP TABLE IF EXISTS "shapes";']);
     });
   });
 

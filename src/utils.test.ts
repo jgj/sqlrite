@@ -1,6 +1,28 @@
 import { describe, expect, it } from "vitest";
 import type { Table, View } from "./introspection-result";
-import { findViewsDependingOnTable, toMap, toMapBy, toMapByName } from "./utils";
+import {
+  findByName,
+  findViewsDependingOnTable,
+  foldName,
+  toMap,
+  toMapBy,
+  toMapByName,
+} from "./utils";
+
+describe("foldName", () => {
+  it("folds the case of ASCII letters only, like SQLite", () => {
+    expect(foldName("Docs_FTS")).toBe("docs_fts");
+    expect(foldName("Ärger")).toBe("Ärger");
+    expect(foldName("ÄRGER")).toBe("Ärger");
+  });
+
+  it("finds items by folded name", () => {
+    const items = [{ name: "Ä" }, { name: "ä" }, { name: "Docs" }];
+    expect(findByName(items, "DOCS")).toBe(items[2]);
+    expect(findByName(items, "ä")).toBe(items[1]);
+    expect(findByName(items, "Ä")).toBe(items[0]);
+  });
+});
 
 describe("Map utility functions", () => {
   const testData = [
@@ -81,6 +103,25 @@ describe("findViewsDependingOnTable", () => {
     const result = findViewsDependingOnTable(usersTable, views);
     expect(result).toEqual(["active_users"]);
     expect(result).not.toContain("product_list");
+  });
+
+  it("should accept any object with a name, such as a virtual table", () => {
+    const views: View[] = [
+      {
+        type: "view",
+        name: "rt_ids",
+        sql: "CREATE VIEW rt_ids AS SELECT id FROM rt",
+        tables: [],
+      },
+      {
+        type: "view",
+        name: "rt_node_ids",
+        sql: "CREATE VIEW rt_node_ids AS SELECT nodeno FROM rt_node",
+        tables: [],
+      },
+    ];
+
+    expect(findViewsDependingOnTable({ name: "rt" }, views)).toEqual(["rt_ids"]);
   });
 
   it("should detect views with schema-qualified references", () => {

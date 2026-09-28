@@ -1,5 +1,5 @@
 import type { View } from "../introspection-result";
-import { toMapByName } from "../utils";
+import { sameNames, toMapByName } from "../utils";
 import { normalizeSql } from "./normalize-sql";
 import type { Diff, Modified } from "./types";
 
@@ -45,11 +45,10 @@ function getViewChanges(current: View, desired: View): (keyof View)[] {
     changes.push("sql");
   }
 
-  // Compare tables arrays by value
-  if (
-    current.tables.length !== desired.tables.length ||
-    current.tables.some((t, i) => t !== desired.tables[i])
-  ) {
+  // Compare the tables the view reads as a set of names: their order follows
+  // sqlite_schema (creation order), which a recreate or the declaration order
+  // changes, and a table may be named in another case on each side
+  if (!sameNames(current.tables, desired.tables)) {
     changes.push("tables");
   }
 

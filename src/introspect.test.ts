@@ -1,9 +1,14 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getDriver } from "./driver";
 import type { Driver } from "./driver";
 import { introspect } from "./introspect";
 import type { IntrospectionResultInput } from "./introspection-result";
 import { type SQLite, getBetterSqlite3Database, getLibsqlClient } from "./sqlite";
+import { registerFactoryModule } from "./test-utils";
 
 describe("introspect", () => {
   // Basic unit test with a mock driver
@@ -52,6 +57,7 @@ describe("introspect", () => {
               ],
               triggers: [],
               views: [],
+              virtual_tables: [],
             } as IntrospectionResultInput),
           },
         ],
@@ -82,6 +88,7 @@ describe("introspect", () => {
               primary_keys: [],
               triggers: [],
               views: [],
+              virtual_tables: [],
             }),
           },
         ],
@@ -506,6 +513,79 @@ describe("introspect", () => {
       expect(result.foreign_keys[0]?.referenced_column).toBe("id");
     });
 
+    it("reports virtual tables and never their shadow tables", async () => {
+      await executeStatements(`
+        CREATE TABLE t (id INTEGER PRIMARY KEY, body TEXT);
+        CREATE TABLE 'quoted_user' (a TEXT);
+        CREATE VIRTUAL TABLE rt USING rtree(id, minX, maxX);
+        CREATE VIRTUAL TABLE f USING fts5(title, body);
+        CREATE VIRTUAL TABLE f4 USING fts4(a);
+        CREATE VIRTUAL TABLE ext USING fts5(body, content='t', content_rowid='id');
+        ALTER TABLE f RENAME TO g;
+        ALTER TABLE rt RENAME TO rt2;
+        CREATE VIEW rt_ids AS SELECT id FROM rt2;
+      `);
+
+      const result = await introspect(driver);
+
+      // R*Tree shadows and the shadows of renamed tables use double-quoted
+      // names; a user table written with single quotes is still a user table
+      expect(result.tables.map((t) => t.name)).toEqual(["t", "quoted_user"]);
+      expect([...new Set(result.columns.map((c) => c.table))]).toEqual(["t", "quoted_user"]);
+      expect(result.indices).toEqual([]);
+      expect(result.primary_keys.map((pk) => pk.table)).toEqual(["t"]);
+
+      expect(
+        result.virtual_tables.map(({ name, module, args }) => ({ name, module, args })),
+      ).toEqual([
+        { name: "rt2", module: "rtree", args: "id, minX, maxX" },
+        { name: "g", module: "fts5", args: "title, body" },
+        { name: "f4", module: "fts4", args: "a" },
+        { name: "ext", module: "fts5", args: "body, content='t', content_rowid='id'" },
+      ]);
+      expect(result.virtual_tables[0]?.sql).toBe(
+        'CREATE VIRTUAL TABLE "rt2" USING rtree(id, minX, maxX)',
+      );
+
+      expect(result.views[0]?.tables).toEqual(["rt2"]);
+    });
+
+    // Table-valued pragmas look a bare name up in temp before main
+    it("reads the main table, not a temp table of the same name", async () => {
+      await executeStatements(`
+        CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, parent INTEGER REFERENCES users(id));
+        CREATE INDEX users_name ON users (name);
+        CREATE TEMP TABLE users (x, y UNIQUE, z);
+      `);
+
+      const result = await introspect(driver);
+      expect(result.tables.map((t) => [t.name, t.num_cols])).toEqual([["users", 3]]);
+      expect(result.columns.map((c) => c.name)).toEqual(["id", "name", "parent"]);
+      expect(result.indices.map((i) => i.name)).toEqual(["users_name"]);
+      expect(result.indices[0]?.columns).toEqual(["name"]);
+      expect(result.foreign_keys.map((fk) => fk.column)).toEqual(["parent"]);
+      expect(result.primary_keys.map((pk) => pk.column)).toEqual(["id"]);
+    });
+
+    it("reports tables in creation order", async () => {
+      await executeStatements(`
+        CREATE TABLE zeta (id INTEGER PRIMARY KEY);
+        CREATE TABLE alpha (id INTEGER PRIMARY KEY, a TEXT);
+        CREATE TABLE mid (id INTEGER PRIMARY KEY);
+        CREATE INDEX alpha_a ON alpha (a);
+      `);
+
+      const result = await introspect(driver);
+
+      expect(result.tables.map((t) => t.name)).toEqual(["zeta", "alpha", "mid"]);
+      expect(result.columns.map((c) => `${c.table}.${c.name}`)).toEqual([
+        "zeta.id",
+        "alpha.id",
+        "alpha.a",
+        "mid.id",
+      ]);
+    });
+
     // This test verifies that we correctly handle all the types that our schema definition supports
     it("should introspect a database with all supported schema elements", async () => {
       await executeStatements(`
@@ -585,6 +665,60 @@ describe("introspect", () => {
       const trigger = result.triggers[0];
       expect(trigger?.name).toBe("after_update_product_stock");
       expect(trigger?.table).toBe("products");
+    });
+  });
+
+  // A virtual table whose module is not loaded on the connection (e.g. an
+  // extension the caller did not load). SQLite cannot classify its shadow
+  // tables, so they look like ordinary tables.
+  describe("virtual table whose module is not loaded", () => {
+    let dir: string;
+    let file: string;
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), "sqlrite-introspect-"));
+      file = join(dir, "db.sqlite");
+      const db = new Database(file);
+      registerFactoryModule(db, "ext_module");
+      db.exec(`
+        CREATE TABLE keep (id INTEGER PRIMARY KEY);
+        CREATE VIRTUAL TABLE vx USING ext_module(a, b);
+        -- stands in for a shadow table the extension would have created
+        CREATE TABLE vx_chunks (id INTEGER PRIMARY KEY, data BLOB);
+      `);
+      db.close();
+    });
+
+    afterEach(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("introspects without error and hides the <name>_* tables", async () => {
+      const db = new Database(file);
+      try {
+        const result = await introspect(getDriver(db));
+
+        expect(result.tables.map((t) => t.name)).toEqual(["keep"]);
+        expect(result.columns.map((c) => c.table)).toEqual(["keep"]);
+        expect(result.primary_keys.map((pk) => pk.table)).toEqual(["keep"]);
+        expect(result.virtual_tables.map((vt) => [vt.name, vt.module, vt.args])).toEqual([
+          ["vx", "ext_module", "a, b"],
+        ]);
+      } finally {
+        db.close();
+      }
+    });
+
+    it("reports <name>_* tables normally once the module is loaded", async () => {
+      const db = new Database(file);
+      registerFactoryModule(db, "ext_module");
+      try {
+        const result = await introspect(getDriver(db));
+
+        expect(result.tables.map((t) => t.name)).toEqual(["keep", "vx_chunks"]);
+      } finally {
+        db.close();
+      }
     });
   });
 });
