@@ -1,4 +1,4 @@
-import type { Column, Table, View } from "./introspection-result";
+import type { Column, View } from "./introspection-result";
 
 export function toMap<T extends object>(items: T[], prop: keyof T) {
   return new Map(items.map((item) => [item[prop], item]));
@@ -15,12 +15,39 @@ export function toMapByName<T extends { name: string }>(items: T[]) {
 export const getColName = (col: Column) => `${col.table}.${col.name}`;
 
 /**
- * Finds all views that depend on a specific table
+ * Fold the case of a table, view or virtual table name the way SQLite matches
+ * identifiers: only ASCII letters are case-insensitive, so "Ä" and "ä" are
+ * two different names while "Docs" and "docs" are the same one.
+ */
+export function foldName(name: string): string {
+  return name.replace(/[A-Z]/g, (c) => c.toLowerCase());
+}
+
+/** Whether two lists name the same objects, in any order (see foldName) */
+export function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  const sorted = (names: readonly string[]) => names.map(foldName).sort();
+  const left = sorted(a);
+  const right = sorted(b);
+  return left.length === right.length && left.every((name, i) => name === right[i]);
+}
+
+/** The item whose name SQLite takes to be `name` (see foldName) */
+export function findByName<T extends { name: string }>(items: T[], name: string): T | undefined {
+  const folded = foldName(name);
+  return items.find((item) => foldName(item.name) === folded);
+}
+
+/**
+ * Finds all views that depend on a specific table (regular or virtual)
  * @param table The table to check dependencies for
- * @param views List of all views to check against
+ * @param views List of all views to check against (or of other objects with a
+ *              SQL body, such as triggers)
  * @returns Array of view names that depend on the specified table
  */
-export function findViewsDependingOnTable(table: Table, views: View[]): string[] {
+export function findViewsDependingOnTable(
+  table: { name: string },
+  views: Pick<View, "name" | "sql">[],
+): string[] {
   const tableName = table.name;
 
   // Check for various ways a table might be referenced in SQL
@@ -185,6 +212,12 @@ export const result = (err?: unknown) => {
 
 export function sqlIdentifier(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
+}
+
+// Helper to ensure SQL statements end with a semicolon
+export function ensureSemicolon(sql: string): string {
+  if (!sql) return "";
+  return sql.trim().endsWith(";") ? sql : `${sql};`;
 }
 
 class InvariantError extends TypeError {}

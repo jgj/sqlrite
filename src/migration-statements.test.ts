@@ -32,7 +32,8 @@ describe("getMigrationStatements", () => {
   const mockClient = { exec: vi.fn() } as unknown as SQLite;
   const mockDDL = "CREATE TABLE users (id INTEGER PRIMARY KEY)";
 
-  const mockCurrentDriver = { name: "sqlite-current" };
+  // query lists the connection's temp objects (none)
+  const mockCurrentDriver = { name: "sqlite-current", query: vi.fn() };
   const mockNextDriver = { name: "sqlite-next" };
   const mockCurrentSchema = { tables: [{ name: "posts" }] };
   const mockNextSchema = { tables: [{ name: "posts" }, { name: "users" }] };
@@ -42,6 +43,7 @@ describe("getMigrationStatements", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    mockCurrentDriver.query.mockResolvedValue([]);
     (getDriver as Mock).mockReturnValue(mockCurrentDriver);
     (getNextDriver as Mock).mockResolvedValue(mockNextDriver);
     (introspect as Mock)
@@ -58,7 +60,7 @@ describe("getMigrationStatements", () => {
     // Verify function calls with correct arguments
     expect(getDriver).toHaveBeenCalledWith(mockClient);
     expect(introspect).toHaveBeenCalledWith(mockCurrentDriver);
-    expect(getNextDriver).toHaveBeenCalledWith(mockClient, mockDDL);
+    expect(getNextDriver).toHaveBeenCalledWith(mockClient, mockDDL, undefined);
     expect(introspect).toHaveBeenCalledWith(mockNextDriver);
     expect(compareSchema).toHaveBeenCalledWith(mockCurrentSchema, mockNextSchema);
     expect(createMigrationPlan).toHaveBeenCalledWith(mockDiff, {});
@@ -66,6 +68,13 @@ describe("getMigrationStatements", () => {
 
     // Verify result
     expect(result).toEqual(mockSQLStatements);
+  });
+
+  it("passes prepareNextDatabase to getNextDriver", async () => {
+    const prepareNextDatabase = vi.fn();
+    await getMigrationStatements(mockClient, mockDDL, { prepareNextDatabase });
+
+    expect(getNextDriver).toHaveBeenCalledWith(mockClient, mockDDL, prepareNextDatabase);
   });
 
   it("should handle empty migration plans", async () => {

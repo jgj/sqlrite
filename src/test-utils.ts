@@ -1,4 +1,41 @@
+import type { Database } from "better-sqlite3";
+import type { IntrospectionResult } from "./introspection-result";
+
+type VirtualTableOptions = Parameters<Database["table"]>[1];
+
 export const cloneObject = <T extends object>(obj: T) => JSON.parse(JSON.stringify(obj)) as T;
+
+/** An introspection result for an empty schema */
+export function emptyIntrospection(): IntrospectionResult {
+  return {
+    tables: [],
+    columns: [],
+    indices: [],
+    foreign_keys: [],
+    primary_keys: [],
+    triggers: [],
+    views: [],
+    virtual_tables: [],
+  };
+}
+
+/**
+ * Register a JavaScript virtual table module on a better-sqlite3 database, so
+ * `CREATE VIRTUAL TABLE x USING <name>(arg, ...)` works there and nowhere
+ * else. It stands in for an extension module (sqlite-vec, ...) that only some
+ * connections have loaded. Each argument becomes a row with column k.
+ */
+export function registerFactoryModule(db: Database, name: string): void {
+  const factory = (...args: string[]) => ({
+    columns: ["k"],
+    *rows() {
+      for (const k of args) yield { k };
+    },
+  });
+  // The factory form (parameterized CREATE VIRTUAL TABLE) is supported at
+  // runtime but missing from @types/better-sqlite3
+  db.table(name, factory as unknown as VirtualTableOptions);
+}
 
 /**
  * Gets the value at path of object.

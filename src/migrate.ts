@@ -1,6 +1,12 @@
 import { getDriver } from "./driver";
-import { type MigrationOptions, getMigrationPreview } from "./migration-statements";
+import {
+  type MigrationOptions,
+  getMigrationPreview,
+  getShadowingTempObjects,
+  tempShadowMessage,
+} from "./migration-statements";
 import type { SQLite } from "./sqlite";
+import { result } from "./utils";
 
 /**
  * Execute the migration plan for a given database and desired schema
@@ -11,8 +17,14 @@ import type { SQLite } from "./sqlite";
  * @param options Migration options that influence which differences produce statements
  */
 export async function migrate(client: SQLite, ddl: string, options: MigrationOptions = {}) {
-  const { statements, warnings } = await getMigrationPreview(client, ddl, options);
+  const { statements, warnings, plan } = await getMigrationPreview(client, ddl, options);
   const driver = getDriver(client);
-  const result = await driver.migrate(statements);
-  return { ...result, statements, warnings };
+  // The statements would change a temp object instead of the main one it
+  // shadows (see getShadowingTempObjects): refuse rather than report success
+  const [shadow] = await getShadowingTempObjects(driver, plan, statements);
+  if (shadow) {
+    return { ...result(new Error(tempShadowMessage(shadow))), statements, warnings };
+  }
+  const outcome = await driver.migrate(statements);
+  return { ...outcome, statements, warnings };
 }

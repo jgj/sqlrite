@@ -12,7 +12,8 @@
 - [x] Detect NOT NULL columns without default requiring recreation
 - [x] Normalize SQL comparison across all object types (tables, indexes, views, triggers)
 - [x] Handle expression indexes in introspection
-- [ ] Virtual table support (FTS5, R-Tree, etc.) — currently ignored safely
+- [x] Virtual table layer (opt-in `manageVirtualTables`): per-module handler registry, default DROP + CREATE handler, shadow tables detected via `pragma_table_list`, `prepareNextDatabase` hook for extension modules
+- [x] FTS5 handler: equivalence of option spellings, data-preserving recreates, external-content rebuilds
 - [x] Add node:sqlite (DatabaseSync) as third supported driver
 
 ### Medium Priority

@@ -7,6 +7,7 @@ import { comparePrimaryKeys } from "./compare/compare-primary-keys";
 import { compareTables } from "./compare/compare-tables";
 import { compareTriggers } from "./compare/compare-triggers";
 import { compareViews } from "./compare/compare-views";
+import { compareVirtualTables } from "./compare/compare-virtual-tables";
 import type { IntrospectionObjectType, IntrospectionResult } from "./introspection-result";
 import { cloneObject } from "./test-utils";
 
@@ -36,6 +37,10 @@ vi.mock("./compare/compare-triggers", () => ({
 
 vi.mock("./compare/compare-views", () => ({
   compareViews: vi.fn().mockReturnValue({ added: [], removed: [], modified: [] }),
+}));
+
+vi.mock("./compare/compare-virtual-tables", () => ({
+  compareVirtualTables: vi.fn().mockReturnValue({ added: [], removed: [], modified: [] }),
 }));
 
 describe("compareSchema", () => {
@@ -86,6 +91,15 @@ describe("compareSchema", () => {
       ],
       triggers: [{ type: "trigger", name: "trg_test", table: "test", sql: "" }],
       views: [{ type: "view", name: "trg_test", sql: "", tables: [] }],
+      virtual_tables: [
+        {
+          type: "virtual_table",
+          name: "vt_test",
+          sql: "CREATE VIRTUAL TABLE vt_test USING rtree(id, minX, maxX)",
+          module: "rtree",
+          args: "id, minX, maxX",
+        },
+      ],
     };
 
     const desired = cloneObject(current);
@@ -99,6 +113,10 @@ describe("compareSchema", () => {
     expect(comparePrimaryKeys).toHaveBeenCalledWith(current.primary_keys, desired.primary_keys);
     expect(compareTriggers).toHaveBeenCalledWith(current.triggers, desired.triggers);
     expect(compareViews).toHaveBeenCalledWith(current.views, desired.views);
+    expect(compareVirtualTables).toHaveBeenCalledWith(
+      current.virtual_tables,
+      desired.virtual_tables,
+    );
   });
 
   it("returns a properly structured diff object", () => {
@@ -110,6 +128,7 @@ describe("compareSchema", () => {
       primary_keys: [],
       triggers: [],
       views: [],
+      virtual_tables: [],
     };
     const desired = cloneObject(current);
 
@@ -123,6 +142,7 @@ describe("compareSchema", () => {
       primary_key: { added: [], removed: [], modified: [] },
       trigger: { added: [], removed: [], modified: [] },
       view: { added: [], removed: [], modified: [] },
+      virtual_table: { added: [], removed: [], modified: [] },
       current,
       desired,
     });
@@ -135,6 +155,7 @@ describe("compareSchema", () => {
       "primary_key",
       "trigger",
       "view",
+      "virtual_table",
     ] as IntrospectionObjectType[]) {
       expect(result[key]).toHaveProperty("added");
       expect(result[key]).toHaveProperty("removed");

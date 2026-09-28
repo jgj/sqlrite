@@ -1,15 +1,40 @@
 import type { SchemaDiff } from "./compare/types";
-import type { Column, Index, Table, Trigger, View } from "./introspection-result";
 import type {
-  CreateOperation,
-  DropOperation,
-  MigrationOperation,
-  RecreateOperation,
-  RecreateReason,
-  RenameOperation,
+  Column,
+  Index,
+  IntrospectionResult,
+  Table,
+  Trigger,
+  View,
+  VirtualTable,
+} from "./introspection-result";
+import {
+  type CreateOperation,
+  type DropOperation,
+  type MigrationOperation,
+  type RebuildOperation,
+  type RecreateOperation,
+  type RecreateReason,
+  type RenameOperation,
+  type VirtualTableRecreateOperation,
+  getTableRenameMap,
 } from "./migration-operation";
 import type { MigrationOptions } from "./migration-statements";
-import { columnsLookLikeRename, invariant } from "./utils";
+import {
+  columnsLookLikeRename,
+  findByName,
+  findViewsDependingOnTable,
+  foldName,
+  invariant,
+  sameNames,
+} from "./utils";
+import {
+  getVirtualTableModule,
+  resolveVirtualTable,
+  sameModule,
+  virtualTableDifferences,
+} from "./virtual-tables/registry";
+import type { DependencyReaction } from "./virtual-tables/types";
 
 export function createMigrationPlan(
   diff: SchemaDiff,
@@ -29,17 +54,43 @@ export function createMigrationPlan(
 
   // Get all tables that need to be recreated
   const tableRecreates = getTableRecreates(diff, options);
+  // Tables whose dependent objects are dropped and recreated by the recreate
+  // itself (see generate-ddl), or left alone (kept)
   const ignore = new Set(tableRecreates.map((t) => t.target.name));
+  const recreated = new Set(ignore);
+  // Tables and virtual tables kept by ignoreTableDeletion
+  const kept = new Set<string>();
 
   // ignoreTableDeletion: suppress drop operations and treat these tables as
   // ignored so dependent indexes/triggers/views aren't dropped either. This
   // runs after the rename heuristic, so drop+create pairs still resolve to
   // renames as usual — only true deletions are suppressed.
   if (options.ignoreTableDeletion) {
+    // A table whose name the desired schema gives to a virtual table is
+    // replaced, not deleted: it is dropped to free the name
+    const replaced = (drop: DropOperation<Table>) =>
+      options.manageVirtualTables === true &&
+      findByName(diff.desired.virtual_tables, drop.current.name) !== undefined;
     for (const drop of tableDrops) {
+      if (replaced(drop)) continue;
       ignore.add(drop.current.name);
+      kept.add(drop.current.name);
     }
-    tableDrops = [];
+    tableDrops = tableDrops.filter(replaced);
+  }
+
+  // Virtual tables are only touched when opted in; with the flag off they are
+  // never created, dropped, altered or warned about.
+  const virtualTables = options.manageVirtualTables
+    ? getVirtualTableOperations(diff, options, tableRecreates, tableRenames)
+    : emptyVirtualTableOperations();
+  for (const name of virtualTables.ignore) {
+    ignore.add(name);
+    recreated.add(name);
+  }
+  for (const name of virtualTables.kept) {
+    ignore.add(name);
+    kept.add(name);
   }
 
   const columnRenames = getColumnRenames(diff, ignore);
@@ -60,27 +111,198 @@ export function createMigrationPlan(
   const indexCreates = getIndexCreates(diff, ignore);
   const triggerDrops = getTriggerDrops(diff, ignore);
   const triggerCreates = getTriggerCreates(diff, ignore);
-  const viewDrops = getViewDrops(diff, ignore);
-  const viewCreates = getViewCreates(diff, ignore);
+  const viewDiff = withoutViewTableChanges(diff, viewTablesToIgnore(diff, kept, options));
+  const viewDrops = getViewDrops(viewDiff, kept, recreated);
+  const viewCreates = getViewCreates(viewDiff, recreated);
+
+  // Renames of tables and virtual tables, ordered so that a rename into a
+  // name runs after the rename that frees it. A table drop that frees a name
+  // a rename takes (a table replaced by a renamed virtual table, or a table
+  // named like one of the renamed virtual table's new shadow tables) runs
+  // first.
+  const renames = orderRenames([...tableRenames, ...virtualTables.renames]);
+  const renameTargets = new Set(renames.flatMap(takenNames));
+  const freeingDrops = tableDrops.filter((d) => renameTargets.has(foldName(d.current.name)));
+  const otherDrops = tableDrops.filter((d) => !freeingDrops.includes(d));
+  const vtRecreates = splitVirtualTableRecreates(
+    virtualTables.recreates,
+    [
+      ...tableCreates.map((c) => c.target.name),
+      ...tableRenames.map((r) => r.target.name),
+      // Virtual tables created or renamed here take their shadow table names
+      // too; both run before the late step of a recreate
+      ...virtualTables.creates.flatMap((c) => heldNames(c.target)),
+      ...virtualTables.renames.flatMap(takenNames),
+    ],
+    diff.desired,
+    getTableRenameMap(tableRenames),
+  );
 
   return [
+    // Virtual tables whose rows are read, or whose shadow table names are
+    // freed, before anything else changes (see splitVirtualTableRecreates)
+    ...vtRecreates.early,
     ...viewDrops, // Drop views first since they may depend on tables
     ...triggerDrops, // Drop triggers before modifying tables they rely on
     ...indexDrops, // Drop indexes before modifying their tables
+    ...virtualTables.drops, // Drop virtual tables before the tables they may read from change
 
     ...tableRecreates, // Recreate tables (involves dropping and recreating)
-    ...tableRenames, // Rename tables
-    ...tableDrops, // Drop tables that aren't being recreated
+    ...freeingDrops, // Drop tables whose name a rename takes
+    ...renames, // Rename tables and virtual tables, before any create takes a freed name
+    ...otherDrops, // Drop tables that aren't being recreated
     ...tableCreates, // Create new tables
 
     ...columnRenames, // Rename columns
     ...columnDrops, // Drop columns
     ...columnAdds, // Add columns
 
+    // Virtual tables once their base tables are final, and before the triggers
+    // (e.g. FTS sync triggers) and views that reference them
+    ...virtualTables.creates,
+    ...vtRecreates.late,
+
     ...indexCreates, // Recreate indexes
     ...triggerCreates, // Recreate triggers
     ...viewCreates, // Recreate views
+
+    // Rebuilds read from content tables and views, so they run once every
+    // table and view exists (generate-ddl also creates the triggers and views
+    // of recreated tables before them)
+    ...virtualTables.rebuilds,
   ];
+}
+
+/**
+ * A virtual table recreate normally runs after every table operation. It is
+ * split in two steps, its drop step running first, before anything else
+ * changes, and its create step where the recreate would have run, when:
+ * - a create or rename of a table or virtual table takes the name of one of
+ *   the current virtual table's shadow tables (e.g. an own-content FTS5 table
+ *   docs becomes external content over a new table docs_content): the shadow
+ *   table holds that name until the virtual table is dropped, and the new
+ *   virtual table may reserve it again
+ * - the handler reads the rows to carry through the current virtual table
+ *   from a relation later operations may drop (dropFirst)
+ */
+function splitVirtualTableRecreates(
+  recreates: VirtualTableRecreateOperation[],
+  takenNames: string[],
+  desired: IntrospectionResult,
+  renamedTables: ReadonlyMap<string, string>,
+): { early: VirtualTableRecreateOperation[]; late: VirtualTableRecreateOperation[] } {
+  const taken = new Set(takenNames.map(foldName));
+  const early: VirtualTableRecreateOperation[] = [];
+  const late: VirtualTableRecreateOperation[] = [];
+
+  for (const op of recreates) {
+    const { handler, args } = resolveVirtualTable(op.current);
+    const shadows = handler.shadowTables?.(args) ?? [];
+    const freesName = shadows.some((suffix) => taken.has(foldName(`${op.current.name}_${suffix}`)));
+    const readsFirst =
+      sameModule(op.current, op.target) &&
+      handler.recreateSteps !== undefined &&
+      handler.dropFirst?.({
+        current: op.current,
+        target: op.target,
+        currentArgs: args,
+        targetArgs: handler.parseArgs(op.target.args),
+        desired,
+        renamedTables,
+      }) === true;
+    if (!freesName && !readsFirst) {
+      late.push(op);
+      continue;
+    }
+    early.push({ ...op, step: "drop" });
+    late.push({ ...op, step: "create" });
+  }
+
+  return { early, late };
+}
+
+/**
+ * The names (folded) a table or virtual table under `name` holds: its own,
+ * and those of the shadow tables of a virtual table. ALTER TABLE ... RENAME of
+ * a virtual table renames its shadow tables along with it, so a rename frees
+ * every name the current table holds and takes every name the target holds.
+ */
+function heldNames(table: Table | VirtualTable, name = table.name): string[] {
+  if (table.type !== "virtual_table") return [foldName(name)];
+  const { handler, args } = resolveVirtualTable(table);
+  const shadows = handler.shadowTables?.(args) ?? [];
+  return [name, ...shadows.map((suffix) => `${name}_${suffix}`)].map(foldName);
+}
+
+/** The names (folded) a rename takes (see heldNames) */
+function takenNames(op: RenameOperation<Table | VirtualTable>): string[] {
+  return heldNames(op.current, op.target.name);
+}
+
+/** A rename of `op.current` to `name`, keeping the object's other details */
+function renameTo(
+  op: RenameOperation<Table | VirtualTable>,
+  current: string,
+  target: string,
+): RenameOperation<Table | VirtualTable> {
+  return {
+    type: "rename",
+    current: { ...op.current, name: current },
+    target: { ...op.target, name: target },
+  } as RenameOperation<Table | VirtualTable>;
+}
+
+/**
+ * Order renames so that each one runs after the rename that frees a name it
+ * takes (`x → y` after `y → z`), shadow table names included (see heldNames).
+ * Independent renames keep their order. A cycle (a swap) is broken by
+ * renaming one table through a temporary name. So is a virtual table rename
+ * that takes a name its own current shadow tables hold (x → x_data), or whose
+ * new shadow tables take its current name (x_data → x).
+ */
+function orderRenames(
+  renames: RenameOperation<Table | VirtualTable>[],
+): RenameOperation<Table | VirtualTable>[] {
+  const temporaryName = (op: RenameOperation<Table | VirtualTable>) =>
+    `sqlrite_rename_${op.target.name}`;
+  const pending: RenameOperation<Table | VirtualTable>[] = [];
+  const ordered: RenameOperation<Table | VirtualTable>[] = [];
+  for (const op of renames) {
+    const holds = new Set(heldNames(op.current));
+    if (!takenNames(op).some((name) => holds.has(name))) {
+      pending.push(op);
+      continue;
+    }
+    // Moving it aside first only frees names; nothing else takes the
+    // temporary one
+    const temporary = temporaryName(op);
+    ordered.push(renameTo(op, op.current.name, temporary));
+    pending.push(renameTo(op, temporary, op.target.name));
+  }
+  // A rename can run once no other pending rename still holds a name it takes
+  const blocked = (op: RenameOperation<Table | VirtualTable>) => {
+    const takes = new Set(takenNames(op));
+    return pending.some(
+      (other) => other !== op && heldNames(other.current).some((name) => takes.has(name)),
+    );
+  };
+
+  while (pending.length > 0) {
+    const index = pending.findIndex((op) => !blocked(op));
+    if (index !== -1) {
+      ordered.push(...pending.splice(index, 1));
+      continue;
+    }
+
+    // Every pending rename waits on another: move the first one aside
+    const [op] = pending.splice(0, 1);
+    invariant(op, "Rename cycle without a rename");
+    const temporary = temporaryName(op);
+    ordered.push(renameTo(op, op.current.name, temporary));
+    pending.push(renameTo(op, temporary, op.target.name));
+  }
+
+  return ordered;
 }
 
 function getTableCreates(diff: SchemaDiff): CreateOperation<Table>[] {
@@ -731,12 +953,22 @@ function getTriggerCreates(
   }));
 }
 
-function getViewDrops(diff: SchemaDiff, tablesToIgnore: Set<string>): DropOperation<View>[] {
-  const removed = diff.view.removed.filter(
-    (view) => !view.tables.some((table) => tablesToIgnore.has(table)),
-  );
+// - kept: removed views that read these tables (kept by ignoreTableDeletion)
+//   are left alone; a recreate of another table they read drops them and puts
+//   them back (see getKeptViews in generate-ddl)
+// - recreated: views that read these tables are dropped and recreated by the
+//   recreate itself (see generate-ddl)
+// A removed view that reads a recreated table is dropped here, before the
+// recreate: the recreate only drops the views it puts back, and a view left
+// reading the table while it is missing makes its ALTER TABLE ... RENAME fail.
+function getViewDrops(
+  diff: SchemaDiff,
+  kept: Set<string>,
+  recreated: Set<string>,
+): DropOperation<View>[] {
+  const removed = diff.view.removed.filter((view) => !view.tables.some((table) => kept.has(table)));
   const modified = diff.view.modified
-    .filter(({ current }) => !current.tables.some((table) => tablesToIgnore.has(table)))
+    .filter(({ current }) => !current.tables.some((table) => recreated.has(table)))
     .map(({ current }) => current);
 
   return [...removed, ...modified].map((view) => ({
@@ -745,18 +977,331 @@ function getViewDrops(diff: SchemaDiff, tablesToIgnore: Set<string>): DropOperat
   }));
 }
 
-function getViewCreates(diff: SchemaDiff, tablesToIgnore: Set<string>): CreateOperation<View>[] {
+function getViewCreates(diff: SchemaDiff, recreated: Set<string>): CreateOperation<View>[] {
   const added = diff.view.added.filter(
-    (view) => !view.tables.some((table) => tablesToIgnore.has(table)),
+    (view) => !view.tables.some((table) => recreated.has(table)),
   );
   const modified = diff.view.modified
-    .filter(({ desired }) => !desired.tables.some((table) => tablesToIgnore.has(table)))
+    .filter(({ desired }) => !desired.tables.some((table) => recreated.has(table)))
     .map(({ desired }) => desired);
 
   return [...added, ...modified].map((view) => ({
     type: "create",
     target: view,
   }));
+}
+
+// Names (folded) whose presence in view.tables alone does not make a view
+// modified:
+// - a table or virtual table kept by ignoreTableDeletion is missing from the
+//   desired schema, so a view that reads it resolves to fewer tables there
+// - view.tables includes the virtual tables a view reads from; with virtual
+//   tables unmanaged, which virtual tables a view resolves to (e.g. the desired
+//   schema omits one the view reads from) is left alone, as it was before
+//   virtual tables were introspected
+// Otherwise the view would be dropped and recreated on every run.
+function viewTablesToIgnore(
+  diff: SchemaDiff,
+  kept: Set<string>,
+  options: MigrationOptions,
+): Set<string> {
+  const names = [...kept];
+  if (!options.manageVirtualTables) {
+    names.push(
+      ...[...diff.current.virtual_tables, ...diff.desired.virtual_tables].map((vt) => vt.name),
+    );
+  }
+  return new Set(names.map(foldName));
+}
+
+// Leave out the views whose only change is to the tables in `ignored`
+function withoutViewTableChanges(diff: SchemaDiff, ignored: Set<string>): SchemaDiff {
+  if (ignored.size === 0) return diff;
+
+  const tables = (view: View) => view.tables.filter((t) => !ignored.has(foldName(t)));
+  const modified = diff.view.modified.filter(
+    ({ current, desired, changes }) =>
+      changes.some((change) => change !== "tables") || !sameNames(tables(current), tables(desired)),
+  );
+
+  return { ...diff, view: { ...diff.view, modified } };
+}
+
+type VirtualTableOperations = {
+  drops: DropOperation<VirtualTable>[];
+  renames: RenameOperation<VirtualTable>[];
+  creates: CreateOperation<VirtualTable>[];
+  recreates: VirtualTableRecreateOperation[];
+  rebuilds: RebuildOperation[];
+  // Names whose dependent views are handled by the virtual table operation
+  // itself, like `ignore` for recreated tables
+  ignore: string[];
+  // Virtual tables kept by ignoreTableDeletion; their dependent views are
+  // left alone
+  kept: string[];
+};
+
+function emptyVirtualTableOperations(): VirtualTableOperations {
+  return {
+    drops: [],
+    renames: [],
+    creates: [],
+    recreates: [],
+    rebuilds: [],
+    ignore: [],
+    kept: [],
+  };
+}
+
+function getVirtualTableOperations(
+  diff: SchemaDiff,
+  options: MigrationOptions,
+  tableRecreates: RecreateOperation[],
+  tableRenames: RenameOperation<Table>[],
+): VirtualTableOperations {
+  const { creates, drops: allDrops, renames } = getVirtualTableRenames(diff);
+  const ignore: string[] = [];
+  const kept: string[] = [];
+
+  // ignoreTableDeletion keeps virtual tables missing from the desired schema,
+  // along with the views that depend on them. A virtual table whose name the
+  // desired schema gives to a regular table is replaced, not deleted: it is
+  // dropped to free the name.
+  let drops = allDrops;
+  if (options.ignoreTableDeletion) {
+    const replaced = (drop: DropOperation<VirtualTable>) =>
+      findByName(diff.desired.tables, drop.current.name) !== undefined;
+    kept.push(...drops.filter((d) => !replaced(d)).map((d) => d.current.name));
+    drops = drops.filter(replaced);
+  }
+
+  const recreates: VirtualTableRecreateOperation[] = diff.virtual_table.modified.map(
+    ({ current, desired }) => ({
+      type: "recreate",
+      current,
+      target: desired,
+      reasons: virtualTableDifferences(current, desired),
+    }),
+  );
+
+  const rebuilds = new Array<RebuildOperation>();
+  const skip = new Set([
+    ...creates.map((c) => c.target.name),
+    ...recreates.map((r) => r.target.name),
+  ]);
+
+  for (const target of diff.desired.virtual_tables) {
+    if (skip.has(target.name)) continue;
+
+    const reaction = getDependencyReaction(target, tableRecreates, tableRenames, diff);
+    if (!reaction) continue;
+
+    if (reaction.type === "rebuild") {
+      rebuilds.push({ type: "rebuild", target, reasons: reaction.reasons });
+      continue;
+    }
+
+    // A pending rename becomes part of the recreate (DROP old + CREATE new)
+    const renameIndex = renames.findIndex((r) => r.target.name === target.name);
+    const [rename] = renameIndex === -1 ? [] : renames.splice(renameIndex, 1);
+    const current = rename?.current ?? findByName(diff.current.virtual_tables, target.name);
+    invariant(current, `Virtual table "${target.name}" is not in the current schema`);
+    recreates.push({ type: "recreate", current, target, reasons: reaction.reasons });
+  }
+
+  for (const { current, target } of recreates) {
+    ignore.push(current.name, target.name);
+  }
+
+  // A virtual table that reads from a view (FTS5 content=<view>) and is
+  // created or recreated here is filled when it is created, but the view may
+  // only be created at the end of the migration: a new or changed view, one
+  // that reads such a view, or one that reads a recreated table or virtual
+  // table (the recreate drops and puts back the views that read it). Fill it
+  // again once every view exists. A view the migration leaves alone exists
+  // all along, so the fill at creation is enough.
+  const recreatedNames = new Set(
+    [
+      ...tableRecreates.map((r) => r.target.name),
+      ...recreates.flatMap((r) => [r.current.name, r.target.name]),
+    ].map(foldName),
+  );
+  for (const { target } of [...creates, ...recreates]) {
+    const { handler, args } = resolveVirtualTable(target);
+    if (!handler.rebuild) continue;
+    const reasons = handler.dependencies(target, args).flatMap((dependency): RecreateReason[] => {
+      const view = findByName(diff.desired.views, dependency);
+      if (!view) return [];
+      const changed = changedViewInChain(view, diff, () => true);
+      const recreatedTable = viewBaseTables(view, diff.desired.views).find(
+        (table) => foldName(table) !== foldName(target.name) && recreatedNames.has(foldName(table)),
+      );
+      if (!changed && !recreatedTable) return [];
+      const why = changed
+        ? `view "${changed.view.name}" is ${changed.change} after it`
+        : `table "${recreatedTable}" below it is recreated after it`;
+      return [
+        {
+          check: "virtual_table.dependency_view",
+          detail: `Virtual table "${target.name}" reads from view "${view.name}", which is created after it (${why})`,
+        },
+      ];
+    });
+    if (reasons.length === 0) continue;
+    rebuilds.push({ type: "rebuild", target, reasons });
+  }
+
+  return { drops, renames, creates, recreates, rebuilds, ignore, kept };
+}
+
+/**
+ * The view and the views it reads, following views that read other views
+ */
+function viewChain(view: View, views: View[], seen = new Set<string>()): View[] {
+  seen.add(foldName(view.name));
+  const nested = views
+    .filter((other) => !seen.has(foldName(other.name)))
+    .filter((other) => findViewsDependingOnTable(other, [view]).length > 0)
+    .flatMap((other) => viewChain(other, views, seen));
+  return [view, ...nested];
+}
+
+/**
+ * The tables (and virtual tables) a view reads, following views that read
+ * other views
+ */
+function viewBaseTables(view: View, views: View[]): string[] {
+  return viewChain(view, views).flatMap((v) => v.tables);
+}
+
+/**
+ * The view in the chain a view reads through (see viewChain) that this
+ * migration creates or whose SQL it changes, and how
+ */
+function changedViewInChain(
+  view: View,
+  diff: SchemaDiff,
+  redefined: (m: SchemaDiff["view"]["modified"][number]) => boolean,
+): { view: View; change: "created" | "redefined" } | undefined {
+  for (const v of viewChain(view, diff.desired.views)) {
+    const same = (name: string) => foldName(name) === foldName(v.name);
+    if (diff.view.added.some((a) => same(a.name))) return { view: v, change: "created" };
+    if (diff.view.modified.some((m) => same(m.desired.name) && redefined(m))) {
+      return { view: v, change: "redefined" };
+    }
+  }
+  return undefined;
+}
+
+// Pair a removed and an added virtual table as a rename when the module
+// supports it and the definitions are equivalent apart from the name
+function getVirtualTableRenames(diff: SchemaDiff) {
+  const renames = new Array<RenameOperation<VirtualTable>>();
+  const matchedAdded = new Set<VirtualTable>();
+  const matchedRemoved = new Set<VirtualTable>();
+
+  for (const removed of diff.virtual_table.removed) {
+    for (const added of diff.virtual_table.added) {
+      if (matchedAdded.has(added)) continue;
+      if (!sameModule(removed, added)) continue;
+      const handler = getVirtualTableModule(added.module);
+      if (!handler.supportsRename) continue;
+      if (handler.canRename && !handler.canRename(removed, handler.parseArgs(removed.args))) {
+        continue;
+      }
+      if (virtualTableDifferences(removed, added).length > 0) continue;
+
+      renames.push({ type: "rename", current: removed, target: added });
+      matchedAdded.add(added);
+      matchedRemoved.add(removed);
+      break;
+    }
+  }
+
+  return {
+    creates: diff.virtual_table.added
+      .filter((vt) => !matchedAdded.has(vt))
+      .map((target): CreateOperation<VirtualTable> => ({ type: "create", target })),
+    drops: diff.virtual_table.removed
+      .filter((vt) => !matchedRemoved.has(vt))
+      .map((current): DropOperation<VirtualTable> => ({ type: "drop", current })),
+    renames,
+  };
+}
+
+// Ask the module handler how a virtual table reacts to its dependencies being
+// recreated or renamed in this migration. The strongest reaction wins.
+//
+// A dependency that is created, redefined or replaced by another kind of
+// object under the same name (a view by a table, a table by a view, a renamed
+// table by a view that takes its old name) holds different rows afterwards,
+// so it counts as recreated too.
+function getDependencyReaction(
+  target: VirtualTable,
+  tableRecreates: RecreateOperation[],
+  tableRenames: RenameOperation<Table>[],
+  diff: SchemaDiff,
+): { type: "rebuild" | "recreate"; reasons: RecreateReason[] } | null {
+  const { handler, args } = resolveVirtualTable(target);
+  if (!handler.onDependencyChanged) return null;
+
+  const desired = diff.desired;
+  const same = (a: string, b: string) => foldName(a) === foldName(b);
+  let type: DependencyReaction = "none";
+  const reasons = new Array<RecreateReason>();
+
+  for (const dependency of handler.dependencies(target, args)) {
+    let change: "recreated" | "renamed" | null = null;
+    let detail = "";
+
+    const view = findByName(desired.views, dependency);
+    // The view itself, or a view it reads through
+    const changed = view && changedViewInChain(view, diff, (m) => m.changes.includes("sql"));
+    if (view && changed) {
+      // The rows the index was built from are not the rows the view returns
+      change = "recreated";
+      detail = same(changed.view.name, view.name)
+        ? `View "${view.name}" read by virtual table "${target.name}" is ${changed.change}`
+        : `View "${changed.view.name}" read by virtual table "${target.name}" through view "${view.name}" is ${changed.change}`;
+    } else if (view) {
+      // A view is read under its own name, which a rename of a table below it
+      // does not change (ALTER TABLE ... RENAME rewrites the view). A table
+      // recreated below it may renumber the rowids the view exposes.
+      const recreatedTable = viewBaseTables(view, desired.views).find((table) =>
+        tableRecreates.some((r) => same(r.target.name, table)),
+      );
+      if (recreatedTable) {
+        change = "recreated";
+        detail = `Table "${recreatedTable}" read by virtual table "${target.name}" through view "${view.name}" is recreated`;
+      }
+    } else if (tableRecreates.some((r) => same(r.target.name, dependency))) {
+      change = "recreated";
+    } else if (
+      tableRenames.some((r) => same(r.current.name, dependency) || same(r.target.name, dependency))
+    ) {
+      change = "renamed";
+    } else if (diff.table.added.some((t) => same(t.name, dependency))) {
+      change = "recreated";
+      detail = `Table "${dependency}" read by virtual table "${target.name}" is created`;
+    }
+    if (!change) continue;
+
+    const reaction = handler.onDependencyChanged({ target, args, dependency, change });
+    if (reaction === "none") continue;
+
+    reasons.push({
+      check: `virtual_table.dependency_${change}`,
+      detail: detail || `Table "${dependency}" read by virtual table "${target.name}" is ${change}`,
+    });
+    // A handler that cannot rebuild falls back to a recreate
+    if (reaction === "recreate" || !handler.rebuild) {
+      type = "recreate";
+    } else if (type === "none") {
+      type = "rebuild";
+    }
+  }
+
+  return type === "none" ? null : { type, reasons };
 }
 
 export type MigrationPlan = MigrationOperation[];

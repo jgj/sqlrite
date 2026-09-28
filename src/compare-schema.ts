@@ -5,6 +5,7 @@ import { comparePrimaryKeys } from "./compare/compare-primary-keys";
 import { compareTables } from "./compare/compare-tables";
 import { compareTriggers } from "./compare/compare-triggers";
 import { compareViews } from "./compare/compare-views";
+import { compareVirtualTables } from "./compare/compare-virtual-tables";
 import type { SchemaDiff } from "./compare/types";
 import type { IntrospectionResult } from "./introspection-result";
 
@@ -23,5 +24,17 @@ export function compareSchema(
   const primary_key = comparePrimaryKeys(current.primary_keys, desired.primary_keys);
   const trigger = compareTriggers(current.triggers, desired.triggers);
   const view = compareViews(current.views, desired.views);
-  return { table, column, index, foreign_key, primary_key, trigger, view, current, desired };
+  const virtual_table = compareVirtualTables(current.virtual_tables, desired.virtual_tables);
+  return {
+    table,
+    column,
+    index,
+    foreign_key,
+    primary_key,
+    trigger,
+    view,
+    virtual_table,
+    current,
+    desired,
+  };
 }

@@ -9,6 +9,7 @@ import type {
   Table,
   Trigger,
   View,
+  VirtualTable,
 } from "../introspection-result";
 
 export type Modified<T extends IntrospectionObject> = {
@@ -32,6 +33,7 @@ export interface SchemaDiff extends Record<IntrospectionObjectType, Diff<any>> {
   primary_key: Diff<PrimaryKey>;
   trigger: Diff<Trigger>;
   view: Diff<View>;
+  virtual_table: Diff<VirtualTable>;
   current: IntrospectionResult;
   desired: IntrospectionResult;
 }

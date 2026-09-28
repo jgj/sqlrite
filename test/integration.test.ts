@@ -16,7 +16,7 @@ describe("sqlrite integration tests", () => {
     const exc = testCases.find((c) => c.exclusive);
     const tests = exc ? [exc] : testCases;
 
-    describe.each(tests)("$filename $description", ({ current, next }) => {
+    describe.each(tests)("$filename $description", ({ current, next, expectNoStatements }) => {
       let client: SQLite;
 
       beforeEach(async () => {
@@ -38,6 +38,7 @@ describe("sqlrite integration tests", () => {
           true,
         );
         expect(res.err).toBeUndefined();
+        if (expectNoStatements) expect(res.statements).toEqual([]);
       });
 
       it("is idempotent", async () => {

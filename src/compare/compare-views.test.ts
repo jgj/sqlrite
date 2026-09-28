@@ -22,6 +22,20 @@ describe("compareViews", () => {
     expect(result.added[0]).toEqual(baseView);
   });
 
+  it("ignores the order and the ASCII case of the tables a view reads", () => {
+    const current: View[] = [{ ...baseView, tables: ["b", "Docs"] }];
+    const desired: View[] = [{ ...baseView, tables: ["docs", "b"] }];
+
+    expect(compareViews(current, desired).modified).toEqual([]);
+  });
+
+  it("still detects a change in the tables a view reads", () => {
+    const current: View[] = [{ ...baseView, tables: ["a", "Ä"] }];
+    const desired: View[] = [{ ...baseView, tables: ["a", "ä"] }];
+
+    expect(compareViews(current, desired).modified.map((m) => m.changes)).toEqual([["tables"]]);
+  });
+
   it("should detect removed views", () => {
     const current: View[] = [baseView];
     const desired: View[] = [];

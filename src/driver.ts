@@ -128,32 +128,62 @@ export const getDriverType: (client: SQLite) => DriverType = (client: SQLite) =>
 export const getDriver: DriverFactory<SQLite> = (client: SQLite) => {
   switch (true) {
     case isLibsqlClient(client):
-      return getLibsqlDriver(client);
+      return preservingLegacyAlterTable(getLibsqlDriver(client));
     case isBetterSqlite3Database(client):
-      return getBetterSqlite3Driver(client);
+      return preservingLegacyAlterTable(getBetterSqlite3Driver(client));
     case isNodeSqliteDatabase(client):
-      return getNodeSqliteDriver(client);
+      return preservingLegacyAlterTable(getNodeSqliteDriver(client));
   }
   throw new TypeError("Unsupported client");
 };
 
-export const getNextDriver = async (client: SQLite, ddl: string) => {
+// A migration may switch PRAGMA legacy_alter_table (the FTS5 handler does to
+// drop a contentless_unindexed table). The pragma belongs to the connection
+// and is not undone by a rollback, so the caller's setting is put back once
+// the migration has run, whether it succeeded or not.
+function preservingLegacyAlterTable(driver: Driver): Driver {
+  const migrate = async (sql: string[]) => {
+    if (!sql.some((stmt) => /legacy_alter_table/i.test(stmt))) return driver.migrate(sql);
+    const [row] = await driver.query<{ legacy_alter_table: unknown }>("PRAGMA legacy_alter_table");
+    const setting = Number(row?.legacy_alter_table ?? 0) ? "ON" : "OFF";
+    try {
+      return await driver.migrate(sql);
+    } finally {
+      await driver.execute(`PRAGMA legacy_alter_table = ${setting}`);
+    }
+  };
+  return { ...driver, migrate };
+}
+
+/**
+ * Build the desired schema in a scratch in-memory database of the same kind as
+ * `client`. `prepare` runs on the scratch client before the DDL, so extension
+ * modules the DDL uses can be loaded first.
+ */
+export const getNextDriver = async (
+  client: SQLite,
+  ddl: string,
+  prepare?: (client: SQLite) => void | Promise<void>,
+) => {
+  const scratch = await getScratchClient(client, prepare !== undefined);
+  await prepare?.(scratch);
+  const driver = getDriver(scratch);
+  await driver.execute(ddl);
+  return driver;
+};
+
+const getScratchClient = async (client: SQLite, withHook: boolean): Promise<SQLite> => {
   switch (true) {
-    case isLibsqlClient(client): {
-      const driver = getLibsqlDriver(await getLibsqlClient());
-      await driver.execute(ddl);
-      return driver;
-    }
-    case isBetterSqlite3Database(client): {
-      const driver = getBetterSqlite3Driver(await getBetterSqlite3Database());
-      await driver.execute(ddl);
-      return driver;
-    }
-    case isNodeSqliteDatabase(client): {
-      const driver = getNodeSqliteDriver(await getNodeSqliteDatabase());
-      await driver.execute(ddl);
-      return driver;
-    }
+    case isLibsqlClient(client):
+      return getLibsqlClient();
+    case isBetterSqlite3Database(client):
+      return getBetterSqlite3Database();
+    case isNodeSqliteDatabase(client):
+      // node:sqlite only allows loadExtension() when the database was opened
+      // with allowExtension; it cannot be enabled afterwards. Opening with
+      // allowExtension throws under Node's permission model (and Deno without
+      // --allow-ffi), so it is only asked for when a hook may load an extension.
+      return withHook ? getNodeSqliteDatabase({ allowExtension: true }) : getNodeSqliteDatabase();
   }
 
   throw new TypeError("Unsupported client");
