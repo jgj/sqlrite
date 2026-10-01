@@ -1,10 +1,53 @@
 import { describe, expect, it } from "vitest";
 import {
+  leadingIdentifier,
   parseCreateVirtualTable,
+  renameIdentifier,
   replaceCreateTableName,
+  splitCreateTable,
   splitModuleArgs,
   unquoteIdentifier,
 } from "./parse";
+
+describe("splitCreateTable", () => {
+  it("splits the column list at top-level commas and keeps the table options", () => {
+    expect(
+      splitCreateTable(
+        "CREATE TABLE \"t\" (id INTEGER PRIMARY KEY, a TEXT CHECK (a IN ('x', 'y')), CHECK (length(a) > 0)) STRICT, WITHOUT ROWID",
+      ),
+    ).toEqual({
+      items: ["id INTEGER PRIMARY KEY", "a TEXT CHECK (a IN ('x', 'y'))", "CHECK (length(a) > 0)"],
+      options: "STRICT, WITHOUT ROWID",
+    });
+  });
+
+  it("throws on a statement without a column list", () => {
+    expect(() => splitCreateTable("CREATE TABLE t AS SELECT 1")).toThrow(SyntaxError);
+  });
+});
+
+describe("leadingIdentifier", () => {
+  it("reads the first token, unquoted", () => {
+    expect(leadingIdentifier("name TEXT")).toBe("name");
+    expect(leadingIdentifier('"my col" TEXT')).toBe("my col");
+    expect(leadingIdentifier("[check] TEXT")).toBe("check");
+    expect(leadingIdentifier("(1)")).toBeUndefined();
+  });
+});
+
+describe("renameIdentifier", () => {
+  it("renames every reference to the identifier, in any quoting and case", () => {
+    expect(renameIdentifier('CHECK (length(Name) > 0 AND "name" <> [NAME])', "name", "title")).toBe(
+      'CHECK (length("title") > 0 AND "title" <> "title")',
+    );
+  });
+
+  it("leaves string literals, comments and longer identifiers alone", () => {
+    expect(renameIdentifier("name_x TEXT DEFAULT 'name' -- name", "name", "title")).toBe(
+      "name_x TEXT DEFAULT 'name' -- name",
+    );
+  });
+});
 
 describe("parseCreateVirtualTable", () => {
   it("parses the stored form of a simple statement", () => {

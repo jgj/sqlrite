@@ -44,17 +44,23 @@ Known edge cases encountered during development and how they're handled.
 
 **Solution**: The migration planner compares SQL definitions (minus the table name) between removed and added tables. If they match, it emits a `RENAME TABLE` instead of `DROP + CREATE`.
 
-## Column Rename Detection
+## Column Renames
 
-**Problem**: Similar to table renames — renaming a column appears as a column removed + column added.
+**Problem**: Similar to table renames — renaming a column appears as a column removed + column added. Unlike a table, a column has no definition that identifies it: two `TEXT` columns of the same nullability look alike, so guessing pairs a dropped column with an unrelated added one. Its data then lands in the wrong column, or the copy fails on the added column's constraints.
 
-**Solution**: Two-pass heuristic matching: strict mode (exact type/constraint match) then relaxed mode (compatible type families like TEXT/VARCHAR/CHAR). This can produce false positives for tables with identically-typed columns, but covers the common case well.
+**Solution**: Column renames are never guessed. They are declared with the `renameColumns` option (`{ [table]: { [from]: to } }`); without one, the column is dropped and the other added. A declared rename is an `ALTER TABLE RENAME COLUMN`, or, when the table is recreated, part of the `INSERT ... SELECT` that copies the data. Look-alike pairs (a strict pass on exact type and constraints, then a relaxed pass on compatible type families like TEXT/VARCHAR/CHAR) are only reported, as `possible_rename` warnings naming the mapping to pass. A mapping that names a column that is not dropped, or a target that is not added, is rejected. A rename already carried out is skipped, so the same options can be passed on every run.
 
-## ADD COLUMN NOT NULL Without Default
+## ADD COLUMN Restrictions
 
-**Problem**: SQLite's `ALTER TABLE ADD COLUMN` requires that NOT NULL columns have a default value. Without one, the operation fails because existing rows would have no value for the new column.
+**Problem**: SQLite's `ALTER TABLE ADD COLUMN` requires that NOT NULL columns have a default value, and rejects a default that is not a literal (`CURRENT_TIMESTAMP`, an expression in parentheses) as non-constant. The introspected default of an expression default has also lost its parentheses.
 
-**Solution**: The migration planner detects added NOT NULL columns without a default and triggers table recreation instead of ALTER TABLE ADD COLUMN.
+**Solution**: The migration planner detects added NOT NULL columns without a default (`column.added.not_null_no_default`) and added columns with a non-literal default (`column.added.non_constant_default`) and triggers table recreation instead of ALTER TABLE ADD COLUMN. `ADD COLUMN` writes the column's definition as the desired `CREATE TABLE` declares it, so its default keeps its parentheses and its CHECK, COLLATE and REFERENCES clauses are kept.
+
+## Changes ALTER TABLE Cannot Make Alongside Column Changes
+
+**Problem**: A table with a column added, dropped or renamed may also change in ways those statements do not make: a table CHECK constraint, another column's collation, the table options.
+
+**Solution**: The planner applies the column changes to the current `CREATE TABLE` (dropping, adding and renaming column definitions, and renaming references to renamed columns) and compares the result with the desired one, column order aside. Any remaining difference triggers table recreation (`table.sql_diff`).
 
 ## Generated Columns in INSERT...SELECT
 

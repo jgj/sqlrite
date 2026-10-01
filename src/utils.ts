@@ -170,6 +170,24 @@ function areValuesSimilar(a: unknown, b: unknown): boolean {
   return a === b;
 }
 
+/**
+ * Whether a column default (as introspected, without the parentheses of an
+ * expression default) is a literal: a number, a string or blob literal, NULL,
+ * TRUE or FALSE. Only these can be written after DEFAULT without parentheses,
+ * and only these are accepted by ALTER TABLE ADD COLUMN, which rejects any
+ * other default as non-constant.
+ */
+export function isLiteralDefault(value: string): boolean {
+  const v = value.trim();
+  return (
+    /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(v) ||
+    /^[+-]?0[xX][0-9a-fA-F]+$/.test(v) ||
+    /^'(?:[^']|'')*'$/.test(v) ||
+    /^[xX]'[0-9a-fA-F]*'$/.test(v) ||
+    /^(null|true|false)$/i.test(v)
+  );
+}
+
 type SuccessResult = {
   success: true;
   err: undefined;

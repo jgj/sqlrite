@@ -18,3 +18,9 @@ export const next = `
     CHECK (length(name) > 0)
   );
 `;
+
+export const options = {
+  renameColumns: {
+    events: { event_name: "name", event_time: "occurred_at", event_data: "payload" },
+  },
+};

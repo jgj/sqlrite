@@ -27,7 +27,7 @@
 - [ ] Performance with large schemas (hundreds of tables)
 - [ ] ATTACH database / multi-schema support
 - [ ] TEMPORARY table handling
-- [ ] Column rename detection disambiguation (handle identical types)
+- [x] Column renames declared with `renameColumns` instead of guessed; look-alikes reported as `possible_rename` warnings
 - [ ] Rollback/undo support
 
 ## Phase 2: Type-Safe Schema Definition

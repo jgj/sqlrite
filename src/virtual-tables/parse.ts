@@ -9,6 +9,8 @@
 // identifier quoting and arbitrary whitespace, and returns the module
 // arguments as raw text for the module handler to interpret.
 
+import { foldName } from "../utils";
+
 export type VirtualTableDefinition = {
   name: string;
   module: string;
@@ -208,6 +210,84 @@ export function replaceCreateTableName(sql: string, replacement: string): string
     end = scanner.pos;
   }
   return `${sql.slice(0, start)}${replacement}${sql.slice(end)}`;
+}
+
+/**
+ * Split `CREATE TABLE name (item, ...) options` into its items (column
+ * definitions and table constraints, trimmed) and the table options after the
+ * closing parenthesis (STRICT, WITHOUT ROWID; trimmed). Throws a SyntaxError
+ * when the text is not a CREATE TABLE statement with a column list.
+ */
+export function splitCreateTable(sql: string): { items: string[]; options: string } {
+  const scanner = new Scanner(sql);
+  scanner.expectKeyword("CREATE");
+  if (!scanner.keyword("TEMP")) scanner.keyword("TEMPORARY");
+  scanner.expectKeyword("TABLE");
+  if (scanner.keyword("IF")) {
+    scanner.expectKeyword("NOT");
+    scanner.expectKeyword("EXISTS");
+  }
+  scanner.identifier();
+  if (scanner.peek() === ".") {
+    scanner.pos++;
+    scanner.identifier();
+  }
+  if (scanner.peek() !== "(") {
+    throw new SyntaxError(`Expected a column list at offset ${scanner.pos} in: ${sql}`);
+  }
+  const open = scanner.pos;
+  const close = findClosingParen(sql, open);
+  return {
+    items: splitModuleArgs(sql.slice(open + 1, close)),
+    options: sql.slice(close + 1).trim(),
+  };
+}
+
+/** The first token of `text` when it is an identifier (unquoted), else undefined */
+export function leadingIdentifier(text: string): string | undefined {
+  try {
+    return new Scanner(text).identifier();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Replace every identifier token naming `from` (in any quoting, case folded
+ * as SQLite does) with `to`, double-quoted. String literals and comments are
+ * left alone. This is what ALTER TABLE RENAME COLUMN does to the column
+ * definitions and constraints of the table.
+ */
+export function renameIdentifier(text: string, from: string, to: string): string {
+  const target = foldName(from);
+  const replacement = `"${to.replaceAll('"', '""')}"`;
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i] ?? "";
+    if (ch === "'" || text.startsWith("--", i) || text.startsWith("/*", i)) {
+      const end = skipLiteralOrComment(text, i);
+      out += text.slice(i, end);
+      i = end;
+      continue;
+    }
+    let end = i;
+    if (QUOTE_CLOSE[ch]) {
+      end = skipQuoted(text, i);
+    } else {
+      const match = IDENTIFIER.exec(text.slice(i));
+      if (match) end = i + match[0].length;
+    }
+    if (end === i) {
+      out += ch;
+      i++;
+      continue;
+    }
+    const token = text.slice(i, end);
+    out += foldName(unquoteIdentifier(token)) === target ? replacement : token;
+    i = end;
+  }
+  return out;
 }
 
 /** Index of the parenthesis that closes the one at `open`, skipping quotes and comments. */

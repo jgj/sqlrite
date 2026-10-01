@@ -4,10 +4,36 @@ import {
   findByName,
   findViewsDependingOnTable,
   foldName,
+  isLiteralDefault,
   toMap,
   toMapBy,
   toMapByName,
 } from "./utils";
+
+describe("isLiteralDefault", () => {
+  it.each([
+    "0",
+    "-1",
+    "+2.5",
+    ".5",
+    "1e10",
+    "0x1F",
+    "'open'",
+    "'it''s'",
+    "X'00ff'",
+    "NULL",
+    "true",
+  ])("takes %s as a literal", (value) => expect(isLiteralDefault(value)).toBe(true));
+
+  it.each([
+    "CURRENT_TIMESTAMP",
+    "current_date",
+    "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+    "1 + 1",
+    "'a' || 'b'",
+    "random()",
+  ])("does not take %s as a literal", (value) => expect(isLiteralDefault(value)).toBe(false));
+});
 
 describe("foldName", () => {
   it("folds the case of ASCII letters only, like SQLite", () => {

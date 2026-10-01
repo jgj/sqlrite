@@ -1,5 +1,6 @@
 import { basename, resolve } from "node:path";
 import { glob } from "glob";
+import type { MigrationOptions } from "../src/migration-statements";
 
 export interface TestCase {
   filename: string;
@@ -9,6 +10,8 @@ export interface TestCase {
   expectNoStatements?: boolean;
   current: string;
   next: string;
+  /** Options passed to every migration of the case */
+  options?: MigrationOptions;
 }
 
 export async function loadTestCases(): Promise<TestCase[]> {
@@ -38,6 +41,7 @@ export async function loadTestCases(): Promise<TestCase[]> {
       expectNoStatements: module.expectNoStatements === true,
       current: module.current,
       next: module.next,
+      options: module.options,
     });
   }
 
