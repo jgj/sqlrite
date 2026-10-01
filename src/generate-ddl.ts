@@ -8,17 +8,19 @@ import type {
   VirtualTable,
 } from "./introspection-result";
 import {
+  type ColumnRename,
   type VirtualTableOperation,
   type VirtualTableRecreateOperation,
   getTableRenameMap,
   isVirtualTableOperation,
 } from "./migration-operation";
 import type { MigrationPlan } from "./migration-plan";
+import { columnDefinitionText } from "./table-definition";
 import {
-  columnsLookLikeRename,
   ensureSemicolon,
   findViewsDependingOnTable,
   invariant,
+  isLiteralDefault,
   isTesting,
   foldName as lower,
   sqlIdentifier as sql,
@@ -183,7 +185,7 @@ export function generateDDL(
           if (operation.target.type === "table") {
             statements.push(generateCreateTableDDL(operation.target));
           } else if (operation.target.type === "column") {
-            statements.push(generateAddColumnDDL(operation.target));
+            statements.push(generateAddColumnDDL(operation.target, next));
           } else if (operation.target.type === "index") {
             statements.push(generateCreateIndexDDL(operation.target));
           } else if (operation.target.type === "trigger") {
@@ -246,6 +248,7 @@ export function generateDDL(
                 targetIndexes,
                 targetTriggers,
                 targetViews,
+                operation.columnRenames ?? [],
                 state,
               ),
             );
@@ -606,8 +609,14 @@ function generateRenameTableDDL(currentTable: Table, targetTable: Table): DDLSta
 }
 
 // Generate DDL for adding a column
-function generateAddColumnDDL(column: Column): DDLStatement {
-  return `ALTER TABLE ${sql(column.table)} ADD COLUMN ${generateColumnDefinition(column)};`;
+// The column is added with its definition from the desired CREATE TABLE, so
+// it gets every constraint written there (CHECK, COLLATE, REFERENCES, ...),
+// which the introspected column does not all record
+function generateAddColumnDDL(column: Column, next: IntrospectionResult): DDLStatement {
+  const table = next.tables.find((t) => t.name === column.table);
+  const definition =
+    (table && columnDefinitionText(table.sql, column.name)) ?? generateColumnDefinition(column);
+  return `ALTER TABLE ${sql(column.table)} ADD COLUMN ${definition};`;
 }
 
 // Generate a column definition string
@@ -629,9 +638,11 @@ function generateColumnDefinition(column: Column): string {
     definition += " NOT NULL";
   }
 
-  // Add default value if specified
+  // Add default value if specified. The introspected default of an expression
+  // default has lost its parentheses, which only a literal can go without.
   if (column.default && column.default.trim() !== "") {
-    definition += ` DEFAULT ${column.default}`;
+    const value = isLiteralDefault(column.default) ? column.default : `(${column.default})`;
+    definition += ` DEFAULT ${value}`;
   }
 
   return definition;
@@ -656,6 +667,7 @@ function generateRecreateTableDDL(
   targetIndexes: Index[],
   targetTriggers: Trigger[],
   targetViews: View[],
+  columnRenames: ColumnRename[],
   state: ViewAndTriggerState,
 ): DDLStatement[] {
   const statements: DDLStatement[] = [];
@@ -677,13 +689,7 @@ function generateRecreateTableDDL(
   const createTempTableSQL = replaceCreateTableName(targetTable.sql, sql(tempTableName));
   statements.push(ensureSemicolon(createTempTableSQL));
 
-  // Build column mapping: target column name -> source column name
-  // Handles both common columns (same name) and renamed columns
-  const generatedColumns = new Set(
-    targetColumns.filter((col) => col.generated !== "none").map((col) => col.name),
-  );
-
-  const columnMapping = buildColumnMapping(currentColumns, targetColumns, generatedColumns);
+  const columnMapping = buildColumnMapping(currentColumns, targetColumns, columnRenames);
 
   // Copy data from old table to new table
   if (columnMapping.length > 0) {
@@ -714,57 +720,24 @@ function generateRecreateTableDDL(
   return statements;
 }
 
-// Build a mapping of target column names to source column names,
-// detecting renamed columns via heuristic matching
+// Build a mapping of target column names to source column names: a column
+// is copied to the column of the same name, or to its new name when the
+// renameColumns option renames it. Renames are never guessed, so a dropped
+// column's data is never written into an unrelated added column.
 function buildColumnMapping(
   currentColumns: Column[],
   targetColumns: Column[],
-  generatedColumns: Set<string>,
+  columnRenames: ColumnRename[],
 ): { source: string; target: string }[] {
-  const mapping: { source: string; target: string }[] = [];
-  const currentByName = new Map(currentColumns.map((col) => [col.name, col]));
+  const currentNames = new Set(currentColumns.map((col) => col.name));
+  const sourceByTarget = new Map(columnRenames.map(({ from, to }) => [to, from]));
 
-  // First pass: match columns with the same name
-  const unmatchedTarget: Column[] = [];
-  for (const targetCol of targetColumns) {
-    if (generatedColumns.has(targetCol.name)) continue;
-    if (currentByName.has(targetCol.name)) {
-      mapping.push({ source: targetCol.name, target: targetCol.name });
-    } else {
-      unmatchedTarget.push(targetCol);
-    }
-  }
-
-  // Second pass: detect renames among unmatched columns
-  if (unmatchedTarget.length > 0) {
-    const matchedTargetNames = new Set(mapping.map((m) => m.target));
-    const unmatchedCurrent = currentColumns.filter((col) => !matchedTargetNames.has(col.name));
-
-    const matchedCurrentIdxs = new Set<number>();
-    for (const targetCol of unmatchedTarget) {
-      for (const [i, currentCol] of unmatchedCurrent.entries()) {
-        if (matchedCurrentIdxs.has(i)) continue;
-        if (columnsLookLikeRename(currentCol, targetCol, true)) {
-          mapping.push({ source: currentCol.name, target: targetCol.name });
-          matchedCurrentIdxs.add(i);
-          break;
-        }
-      }
-    }
-
-    // Relaxed pass for remaining unmatched
-    for (const targetCol of unmatchedTarget) {
-      if (mapping.some((m) => m.target === targetCol.name)) continue;
-      for (const [i, currentCol] of unmatchedCurrent.entries()) {
-        if (matchedCurrentIdxs.has(i)) continue;
-        if (columnsLookLikeRename(currentCol, targetCol, false)) {
-          mapping.push({ source: currentCol.name, target: targetCol.name });
-          matchedCurrentIdxs.add(i);
-          break;
-        }
-      }
-    }
-  }
-
-  return mapping;
+  return targetColumns.flatMap((targetCol) => {
+    // Generated columns are computed, never inserted into
+    if (targetCol.generated !== "none") return [];
+    const source = currentNames.has(targetCol.name)
+      ? targetCol.name
+      : sourceByTarget.get(targetCol.name);
+    return source === undefined ? [] : [{ source, target: targetCol.name }];
+  });
 }

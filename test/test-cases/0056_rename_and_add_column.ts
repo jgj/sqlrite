@@ -14,3 +14,5 @@ export const next = `
     email TEXT NOT NULL
   );
 `;
+
+export const options = { renameColumns: { users: { username: "name" } } };

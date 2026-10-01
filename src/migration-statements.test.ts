@@ -37,7 +37,13 @@ describe("getMigrationStatements", () => {
   const mockNextDriver = { name: "sqlite-next" };
   const mockCurrentSchema = { tables: [{ name: "posts" }] };
   const mockNextSchema = { tables: [{ name: "posts" }, { name: "users" }] };
-  const mockDiff = { added: [{ name: "users" }], dropped: [], altered: [] };
+  // The warnings read the modified tables' columns (none)
+  const mockDiff = {
+    added: [{ name: "users" }],
+    dropped: [],
+    altered: [],
+    table: { modified: [] },
+  };
   const mockMigrationPlan = [{ type: "create_table", name: "users" }];
   const mockSQLStatements = ["CREATE TABLE users (id INTEGER PRIMARY KEY);"];
 
@@ -79,7 +85,12 @@ describe("getMigrationStatements", () => {
 
   it("should handle empty migration plans", async () => {
     // Update mocks to simulate no changes
-    (compareSchema as Mock).mockReturnValue({ added: [], dropped: [], altered: [] });
+    (compareSchema as Mock).mockReturnValue({
+      added: [],
+      dropped: [],
+      altered: [],
+      table: { modified: [] },
+    });
     (createMigrationPlan as Mock).mockReturnValue([]);
     (generateDDL as Mock).mockReturnValue([]);
 

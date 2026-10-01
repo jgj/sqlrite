@@ -3,7 +3,7 @@ import type { SchemaDiff } from "./compare/types";
 import { type Driver, getDriver, getNextDriver } from "./driver";
 import { generateDDL } from "./generate-ddl";
 import { introspect } from "./introspect";
-import type { IntrospectionResult } from "./introspection-result";
+import type { Column, IntrospectionResult } from "./introspection-result";
 import {
   type VirtualTableOperation,
   getTableRenameMap,
@@ -13,7 +13,7 @@ import type { MigrationPlan } from "./migration-plan";
 import { createMigrationPlan } from "./migration-plan";
 import type { SQLite } from "./sqlite";
 import { type UnloadedModuleShadows, revealDeclaredTables } from "./unloaded-modules";
-import { findByName, foldName } from "./utils";
+import { columnsLookLikeRename, findByName, foldName, getColName } from "./utils";
 import {
   getRecreateModule,
   getVirtualTableModule,
@@ -22,12 +22,45 @@ import {
 } from "./virtual-tables/registry";
 import type { VirtualTableModule } from "./virtual-tables/types";
 
-export type MigrationWarning = {
-  type: "destructive" | "caution";
-  message: string;
-};
+export type MigrationWarning =
+  | {
+      type: "destructive" | "caution";
+      message: string;
+    }
+  | {
+      /**
+       * A column the migration drops looks like it was renamed to a column it
+       * adds to the same table. Its data is lost unless the rename is declared
+       * with the renameColumns option: `{ [table]: { [from]: to } }`.
+       */
+      type: "possible_rename";
+      message: string;
+      table: string;
+      from: string;
+      to: string;
+    };
 
 export type MigrationOptions = {
+  /**
+   * Columns to rename, by table and then by current column name:
+   * `{ users: { username: "name" } }`. A rename keeps the column's data under
+   * its new name, by ALTER TABLE RENAME COLUMN or, when the table is
+   * recreated, by copying it from the old name to the new one.
+   *
+   * Renames are never guessed. Without a declared rename, a column the
+   * desired schema drops is dropped with its data, and a column it adds
+   * starts empty. A dropped and an added column of the same table that look
+   * alike are reported in a "possible_rename" warning, which names the
+   * mapping to pass here.
+   *
+   * Each rename must name a column the current schema has and the desired
+   * schema drops, and a column the desired schema adds to the same table;
+   * otherwise the migration preview throws. A rename already carried out (the
+   * current schema has the new name and not the old one) is skipped, so the
+   * same options can be passed again after the migration has run.
+   */
+  renameColumns?: Record<string, Record<string, string>>;
+
   /**
    * When true, tables present in the current schema but absent from the desired
    * schema are not dropped. Indexes, triggers, and views that depend on those
@@ -246,24 +279,32 @@ function generateWarnings(
         break;
 
       case "recreate": {
-        // Check for columns that exist in current but not in target (data loss)
-        const currentCols = diff.current.columns
-          .filter((c) => c.table === op.current.name)
-          .map((c) => c.name);
+        // Columns that exist in current but not in target lose their data,
+        // unless they are renamed (the recreate copies them to the new name,
+        // see buildColumnMapping in generate-ddl)
+        const renames = op.columnRenames ?? [];
+        const renamedFrom = new Set(renames.map((r) => r.from));
         const targetCols = diff.desired.columns
           .filter((c) => c.table === op.target.name)
           .map((c) => c.name);
-        const droppedCols = currentCols.filter((name) => !targetCols.includes(name));
+        const droppedCols = diff.current.columns
+          .filter((c) => c.table === op.current.name)
+          .map((c) => c.name)
+          .filter((name) => !targetCols.includes(name) && !renamedFrom.has(name));
+        const renamed =
+          renames.length > 0
+            ? ` Column(s) ${renames.map((r) => `"${r.from}" → "${r.to}"`).join(", ")} will be renamed, keeping their data.`
+            : "";
 
         if (droppedCols.length > 0) {
           warnings.push({
             type: "destructive",
-            message: `Table "${op.current.name}" will be recreated. Column(s) ${droppedCols.map((c) => `"${c}"`).join(", ")} will be dropped. Data in these columns will be lost.`,
+            message: `Table "${op.current.name}" will be recreated. Column(s) ${droppedCols.map((c) => `"${c}"`).join(", ")} will be dropped. Data in these columns will be lost.${renamed}`,
           });
         } else {
           warnings.push({
             type: "caution",
-            message: `Table "${op.current.name}" will be recreated. Data will be preserved, but this operation is not atomic outside a transaction.`,
+            message: `Table "${op.current.name}" will be recreated.${renamed} Data will be preserved, but this operation is not atomic outside a transaction.`,
           });
         }
         break;
@@ -271,6 +312,58 @@ function generateWarnings(
     }
   }
 
+  warnings.push(...possibleRenameWarnings(plan, diff));
+
+  return warnings;
+}
+
+/**
+ * Columns the migration drops that look like they were renamed to a column
+ * it adds to the same table (see columnsLookLikeRename): a strict pass, then
+ * a relaxed one, each column paired at most once. Columns the renameColumns
+ * option renames are left out.
+ */
+function possibleRenameWarnings(plan: MigrationPlan, diff: SchemaDiff): MigrationWarning[] {
+  const renamed = new Set<string>();
+  for (const op of plan) {
+    if (op.type === "rename" && op.current.type === "column" && op.target.type === "column") {
+      renamed.add(getColName(op.current));
+      renamed.add(getColName(op.target));
+    } else if (op.type === "recreate" && !isVirtualTableOperation(op)) {
+      for (const { from, to } of op.columnRenames ?? []) {
+        renamed.add(`${op.current.name}.${from}`);
+        renamed.add(`${op.current.name}.${to}`);
+      }
+    }
+  }
+
+  const warnings: MigrationWarning[] = [];
+  for (const { current: table } of diff.table.modified) {
+    const unrenamed = (columns: Column[]) =>
+      columns.filter((col) => col.table === table.name && !renamed.has(getColName(col)));
+    const removed = unrenamed(diff.column.removed);
+    const added = unrenamed(diff.column.added);
+    const paired = new Set<Column>();
+
+    for (const strict of [true, false]) {
+      for (const from of removed) {
+        if (paired.has(from)) continue;
+        const to = added.find(
+          (col) => !paired.has(col) && columnsLookLikeRename(from, col, strict),
+        );
+        if (!to) continue;
+        paired.add(from);
+        paired.add(to);
+        warnings.push({
+          type: "possible_rename",
+          table: table.name,
+          from: from.name,
+          to: to.name,
+          message: `Column "${from.name}" of table "${table.name}" will be dropped and column "${to.name}" added. If "${to.name}" is "${from.name}" renamed, declare it with renameColumns: { ${JSON.stringify(table.name)}: { ${JSON.stringify(from.name)}: ${JSON.stringify(to.name)} } } to keep its data.`,
+        });
+      }
+    }
+  }
   return warnings;
 }
 

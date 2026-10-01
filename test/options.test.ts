@@ -371,4 +371,132 @@ describe("MigrationOptions", () => {
       expect(second.statements).toEqual([]);
     });
   });
+
+  describe("renameColumns", () => {
+    let client: SQLite;
+
+    beforeEach(async () => {
+      client = await getLibsqlClient();
+    });
+
+    afterEach(async () => {
+      if ("close" in client) {
+        await client.close();
+      }
+    });
+
+    const current = `
+      CREATE TABLE t (id INTEGER PRIMARY KEY, type TEXT NOT NULL CHECK (type IN ('defect', 'feature')), fingerprint TEXT, title TEXT NOT NULL) STRICT;
+      INSERT INTO t (type, fingerprint, title) VALUES ('defect', 'abc123', 'one');
+    `;
+    const next =
+      "CREATE TABLE t (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done')), note TEXT) STRICT;";
+
+    it("never guesses a rename, and reports look-alike columns as possible renames", async () => {
+      await getDriver(client).execute(current);
+
+      const preview = await getMigrationPreview(client, next);
+
+      expect(preview.statements).toContain(
+        'INSERT INTO "temp_t" ("id", "title") SELECT "id", "title" FROM "t";',
+      );
+      expect(preview.warnings).toEqual([
+        expect.objectContaining({
+          type: "destructive",
+          message: expect.stringContaining('Column(s) "type", "fingerprint" will be dropped'),
+        }),
+        expect.objectContaining({
+          type: "possible_rename",
+          table: "t",
+          from: "fingerprint",
+          to: "note",
+        }),
+        expect.objectContaining({
+          type: "possible_rename",
+          table: "t",
+          from: "type",
+          to: "status",
+        }),
+      ]);
+
+      const res = await migrate(client, next);
+      expect(res.success, res.err?.message).toBe(true);
+      const rows = await getDriver(client).query("SELECT title, status, note FROM t");
+      expect(rows).toEqual([{ title: "one", status: "open", note: null }]);
+    });
+
+    it("copies a renamed column's data during a recreate and says so in the warning", async () => {
+      await getDriver(client).execute(current);
+      const options = { renameColumns: { t: { fingerprint: "note" } } };
+
+      const preview = await getMigrationPreview(client, next, options);
+
+      expect(preview.warnings).toEqual([
+        {
+          type: "destructive",
+          message:
+            'Table "t" will be recreated. Column(s) "type" will be dropped. Data in these columns will be lost. Column(s) "fingerprint" → "note" will be renamed, keeping their data.',
+        },
+        expect.objectContaining({ type: "possible_rename", from: "type", to: "status" }),
+      ]);
+
+      const res = await migrate(client, next, options);
+      expect(res.success, res.err?.message).toBe(true);
+      const rows = await getDriver(client).query("SELECT title, status, note FROM t");
+      expect(rows).toEqual([{ title: "one", status: "open", note: "abc123" }]);
+
+      // The same options are accepted once the rename is done
+      const again = await getMigrationPreview(client, next, options);
+      expect(again.statements).toEqual([]);
+      expect(again.warnings).toEqual([]);
+    });
+
+    it("renames in place with ALTER TABLE RENAME COLUMN when no recreate is needed", async () => {
+      await getDriver(client).execute(
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL, email TEXT); INSERT INTO users (username, email) VALUES ('ann', 'a@x');",
+      );
+      const desired =
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT);";
+      const options = { renameColumns: { users: { username: "name" } } };
+
+      const preview = await getMigrationPreview(client, desired, options);
+      expect(preview.statements).toEqual([
+        'ALTER TABLE "users" RENAME COLUMN "username" TO "name";',
+      ]);
+      expect(preview.warnings).toEqual([]);
+
+      const res = await migrate(client, desired, options);
+      expect(res.success, res.err?.message).toBe(true);
+      const rows = await getDriver(client).query("SELECT name, email FROM users");
+      expect(rows).toEqual([{ name: "ann", email: "a@x" }]);
+    });
+
+    it("recreates when a renamed column also changes", async () => {
+      await getDriver(client).execute(
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT); INSERT INTO users (username) VALUES ('ann');",
+      );
+      const desired = "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '');";
+      const options = { renameColumns: { users: { username: "name" } } };
+
+      const preview = await getMigrationPreview(client, desired, options);
+      const recreate = preview.plan.find((op) => op.type === "recreate");
+      expect(recreate?.reasons?.map((r) => r.check)).toContain("column.renamed.modified");
+
+      const res = await migrate(client, desired, options);
+      expect(res.success, res.err?.message).toBe(true);
+      expect(await getDriver(client).query("SELECT name FROM users")).toEqual([{ name: "ann" }]);
+    });
+
+    it.each([
+      [{ nope: { a: "b" } }, 'table "nope" must exist in both'],
+      [{ t: { missing: "note" } }, 'column "missing" of table "t" is not in the current schema'],
+      [{ t: { title: "note" } }, 'column "title" of table "t" is still in the desired schema'],
+      [{ t: { fingerprint: "title" } }, 'column "title" of table "t" is already in the current'],
+      [{ t: { fingerprint: "missing" } }, 'column "missing" of table "t" is not in the desired'],
+      [{ t: { fingerprint: "note", type: "note" } }, 'more than one column of table "t"'],
+    ])("rejects the invalid mapping %j", async (renameColumns, message) => {
+      await getDriver(client).execute(current);
+      await expect(getMigrationPreview(client, next, { renameColumns })).rejects.toThrow(message);
+    });
+  });
 });

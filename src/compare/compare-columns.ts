@@ -32,7 +32,7 @@ export function compareColumns(current: Column[], desired: Column[]): Diff<Colum
   return { added, removed, modified };
 }
 
-function hasColumnLevelDifferences(current: Column, desired: Column) {
+export function hasColumnLevelDifferences(current: Column, desired: Column) {
   const changes: (keyof Column)[] = [];
 
   if (current.data_type !== desired.data_type) changes.push("data_type");

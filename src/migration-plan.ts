@@ -1,3 +1,4 @@
+import { hasColumnLevelDifferences } from "./compare/compare-columns";
 import type { SchemaDiff } from "./compare/types";
 import type {
   Column,
@@ -20,12 +21,14 @@ import {
   getTableRenameMap,
 } from "./migration-operation";
 import type { MigrationOptions } from "./migration-statements";
+import { columnChangesExplainTable } from "./table-definition";
 import {
-  columnsLookLikeRename,
   findByName,
   findViewsDependingOnTable,
   foldName,
+  getColName,
   invariant,
+  isLiteralDefault,
   sameNames,
 } from "./utils";
 import {
@@ -52,8 +55,12 @@ export function createMigrationPlan(
 
   let [tableCreates, tableDrops, tableRenames] = getTableRenames(diff);
 
+  // Column renames are never guessed: only the ones the renameColumns option
+  // declares are carried out
+  const declaredRenames = resolveColumnRenames(diff, options);
+
   // Get all tables that need to be recreated
-  const tableRecreates = getTableRecreates(diff, options);
+  const tableRecreates = getTableRecreates(diff, options, declaredRenames);
   // Tables whose dependent objects are dropped and recreated by the recreate
   // itself (see generate-ddl), or left alone (kept)
   const ignore = new Set(tableRecreates.map((t) => t.target.name));
@@ -93,17 +100,13 @@ export function createMigrationPlan(
     kept.add(name);
   }
 
-  const columnRenames = getColumnRenames(diff, ignore);
+  // Renames on recreated tables are carried out by the recreate itself
+  const columnRenames = declaredRenames
+    .filter((rename) => !ignore.has(rename.current.table))
+    .map((rename) => createRenameOperation(rename.current, rename.target));
 
   // Track columns involved in renames to exclude them from adds/drops
-  const renamedColumns = new Set<string>();
-  for (const rename of columnRenames) {
-    if (rename.current && rename.target) {
-      // Use a unique identifier for the column
-      renamedColumns.add(`${rename.current.table}.${rename.current.name}`);
-      renamedColumns.add(`${rename.target.table}.${rename.target.name}`);
-    }
-  }
+  const renamedColumns = renamedColumnKeys(declaredRenames);
 
   const columnAdds = getColumnAdds(diff, ignore, renamedColumns);
   const columnDrops = getColumnDrops(diff, ignore, renamedColumns);
@@ -367,7 +370,11 @@ function recordRecreate(
   list.push({ check, detail });
 }
 
-function getTableRecreates(diff: SchemaDiff, options: MigrationOptions): RecreateOperation[] {
+function getTableRecreates(
+  diff: SchemaDiff,
+  options: MigrationOptions,
+  renames: DeclaredColumnRename[],
+): RecreateOperation[] {
   const result = new Array<RecreateOperation>();
   const reasons: RecreateReasonMap = new Map();
 
@@ -377,7 +384,7 @@ function getTableRecreates(diff: SchemaDiff, options: MigrationOptions): Recreat
   );
 
   // Check for column changes that require table recreation
-  checkColumnsForRecreation(diff, reasons, options);
+  checkColumnsForRecreation(diff, reasons, options, renames);
 
   // Check for primary key changes that require table recreation
   checkPrimaryKeysForRecreation(diff, reasons);
@@ -389,17 +396,21 @@ function getTableRecreates(diff: SchemaDiff, options: MigrationOptions): Recreat
   checkIndicesForRecreation(diff, reasons);
 
   // Check for tables that would have previously been rewritten
-  checkTablesForConstraintChanges(diff, reasons, options);
+  checkTablesForConstraintChanges(diff, reasons, options, renames);
 
   // Generate RecreateOperations for identified tables
   for (const [tableName, tableReasons] of reasons) {
     const modifiedTable = modifiedTables.get(tableName);
     if (modifiedTable) {
+      const columnRenames = renames
+        .filter((rename) => rename.current.table === tableName)
+        .map((rename) => ({ from: rename.current.name, to: rename.target.name }));
       result.push({
         type: "recreate",
         current: modifiedTable.current,
         target: modifiedTable.desired,
         reasons: tableReasons,
+        ...(columnRenames.length > 0 && { columnRenames }),
       });
     }
   }
@@ -411,7 +422,9 @@ function checkColumnsForRecreation(
   diff: SchemaDiff,
   reasons: RecreateReasonMap,
   options: MigrationOptions,
+  renames: DeclaredColumnRename[],
 ): void {
+  const renamed = renamedColumnKeys(renames);
   // Group columns by table for easier analysis
   const columnsByTable = new Map<string, { current: Column[]; desired: Column[] }>();
 
@@ -438,18 +451,48 @@ function checkColumnsForRecreation(
     }
   }
 
+  // A renamed column is renamed in place by ALTER TABLE RENAME COLUMN, which
+  // changes nothing else about it, nor moves it
+  for (const { current, target } of renames) {
+    const changes = hasColumnLevelDifferences(current, target).filter(
+      (change) => !(options.ignoreColumnOrder && change === "ordinal_position"),
+    );
+    if (changes.length > 0) {
+      recordRecreate(
+        reasons,
+        current.table,
+        "column.renamed.modified",
+        `Renamed column "${current.name}" → "${target.name}" also changes (changes: ${changes.join(", ")})`,
+      );
+    }
+  }
+
   // Handle added columns that can't use ALTER TABLE ADD COLUMN
   for (const column of diff.column.added) {
     // Skip columns on newly created tables
     if (diff.table.added.some((t) => t.name === column.table)) continue;
+    if (renamed.has(getColName(column))) continue;
+
+    const hasDefault = column.default.trim() !== "";
 
     // SQLite requires that NOT NULL columns added via ALTER TABLE have a default value
-    if (!column.nullable && (!column.default || column.default.trim() === "")) {
+    if (!column.nullable && !hasDefault) {
       recordRecreate(
         reasons,
         column.table,
         "column.added.not_null_no_default",
         `Added column "${column.name}" is NOT NULL without a default; ALTER TABLE ADD COLUMN cannot be used`,
+      );
+    }
+
+    // ALTER TABLE ADD COLUMN rejects a default that is not a literal
+    // (CURRENT_TIMESTAMP, an expression in parentheses, ...)
+    if (hasDefault && !isLiteralDefault(column.default)) {
+      recordRecreate(
+        reasons,
+        column.table,
+        "column.added.non_constant_default",
+        `Added column "${column.name}" has a non-constant default (${column.default}); ALTER TABLE ADD COLUMN cannot be used`,
       );
     }
 
@@ -467,6 +510,7 @@ function checkColumnsForRecreation(
 
   // Handle dropped columns - only require recreation if the column is not at the end
   for (const column of diff.column.removed) {
+    if (renamed.has(getColName(column))) continue;
     const table = diff.current.tables.find((t) => t.name === column.table);
     invariant(
       table,
@@ -677,6 +721,7 @@ function checkTablesForConstraintChanges(
   diff: SchemaDiff,
   reasons: RecreateReasonMap,
   options: MigrationOptions,
+  renames: DeclaredColumnRename[],
 ): void {
   // Identify tables with DEFAULT value changes or NOT NULL constraint changes
   for (const { current, desired, changes } of diff.column.modified) {
@@ -724,14 +769,25 @@ function checkTablesForConstraintChanges(
     }
   }
 
-  // Catch remaining constraint changes (table-level CHECK, etc.) by comparing SQL
-  // but only for tables whose SQL difference is NOT already explained by
-  // column adds, drops, or renames
+  // Catch remaining constraint changes (table-level CHECK, COLLATE, etc.) by
+  // comparing SQL, unless the column adds, drops and renames ALTER TABLE makes
+  // explain the whole SQL difference
+  const renamed = renamedColumnKeys(renames);
   for (const { current, desired } of diff.table.modified) {
     if (current.sql === desired.sql) continue;
 
-    // If this table has column adds, drops, or renames, those explain the SQL difference
-    if (tableHasColumnStructureChanges(current.name, diff)) continue;
+    const unrenamed = (columns: Column[]) =>
+      columns
+        .filter((col) => col.table === current.name && !renamed.has(getColName(col)))
+        .map((col) => col.name);
+    const columnChanges = {
+      dropped: unrenamed(diff.column.removed),
+      added: unrenamed(diff.column.added),
+      renamed: renames
+        .filter((rename) => rename.current.table === current.name)
+        .map((rename) => ({ from: rename.current.name, to: rename.target.name })),
+    };
+    if (columnChangesExplainTable(current, desired, columnChanges)) continue;
 
     // With ignoreColumnOrder on, a pure reorder makes the SQL string differ but
     // is intentionally being ignored — don't let table.sql_diff reintroduce the
@@ -756,83 +812,83 @@ function tableHasOnlyColumnReorder(tableName: string, diff: SchemaDiff): boolean
   return mods.every((m) => m.changes.length === 1 && m.changes[0] === "ordinal_position");
 }
 
-// Check if a table's SQL difference is explained by column-level operations
-// (adds, drops, renames) that are handled via ALTER TABLE
-function tableHasColumnStructureChanges(tableName: string, diff: SchemaDiff): boolean {
-  const hasAdds = diff.column.added.some((col) => col.table === tableName);
-  const hasDrops = diff.column.removed.some((col) => col.table === tableName);
-  const hasRenames =
-    diff.column.added.some((col) => col.table === tableName) &&
-    diff.column.removed.some((col) => col.table === tableName);
+/** A column rename declared by the renameColumns option */
+export type DeclaredColumnRename = { current: Column; target: Column };
 
-  return hasAdds || hasDrops || hasRenames;
+/**
+ * The column renames the renameColumns option declares, resolved to the
+ * columns of the diff. A rename already carried out (the current schema has
+ * the new name and not the old one, and the desired schema has the new name)
+ * is skipped, so the same options can be passed again once the migration has
+ * run. Otherwise it throws when a rename does not describe a column the
+ * current schema has and the desired schema drops, paired with a column the
+ * desired schema adds to the same table: a stale or mistyped mapping must not
+ * silently turn into a drop and an add.
+ */
+export function resolveColumnRenames(
+  diff: SchemaDiff,
+  options: MigrationOptions,
+): DeclaredColumnRename[] {
+  const result: DeclaredColumnRename[] = [];
+  for (const [tableName, columns] of Object.entries(options.renameColumns ?? {})) {
+    const currentTable = findByName(diff.current.tables, tableName);
+    if (!currentTable || !findByName(diff.desired.tables, tableName)) {
+      throw new Error(
+        `renameColumns: table "${tableName}" must exist in both the current and the desired schema`,
+      );
+    }
+    const table = currentTable.name;
+    const targets = new Set<string>();
+    for (const [from, to] of Object.entries(columns)) {
+      if (targets.has(foldName(to))) {
+        throw new Error(
+          `renameColumns: more than one column of table "${table}" is renamed to "${to}"`,
+        );
+      }
+      targets.add(foldName(to));
+
+      const applied =
+        !findColumn(diff.current.columns, table, from) &&
+        findColumn(diff.current.columns, table, to) &&
+        findColumn(diff.desired.columns, table, to);
+      if (applied) continue;
+
+      const current = findColumn(diff.column.removed, table, from);
+      if (!current) {
+        const reason = findColumn(diff.desired.columns, table, from)
+          ? "is still in the desired schema"
+          : "is not in the current schema";
+        throw new Error(`renameColumns: column "${from}" of table "${table}" ${reason}`);
+      }
+      const target = findColumn(diff.column.added, table, to);
+      if (!target) {
+        const reason = findColumn(diff.current.columns, table, to)
+          ? "is already in the current schema"
+          : "is not in the desired schema";
+        throw new Error(`renameColumns: column "${to}" of table "${table}" ${reason}`);
+      }
+      if (target.generated !== "none") {
+        throw new Error(
+          `renameColumns: column "${to}" of table "${table}" is generated, so no data can be renamed into it`,
+        );
+      }
+      result.push({ current, target });
+    }
+  }
+  return result;
 }
 
-function getColumnRenames(
-  diff: SchemaDiff,
-  tablesToIgnore: Set<string>,
-): RenameOperation<Column>[] {
-  const result = new Array<RenameOperation<Column>>();
+function findColumn(columns: Column[], table: string, name: string): Column | undefined {
+  return columns.find(
+    (col) => foldName(col.table) === foldName(table) && foldName(col.name) === foldName(name),
+  );
+}
 
-  // Filter out ignored tables
-  const removedColumns = diff.column.removed.filter((col) => !tablesToIgnore.has(col.table));
-  const addedColumns = diff.column.added.filter((col) => !tablesToIgnore.has(col.table));
-
-  // If we have no removed or added columns, there can't be any renames
-  if (removedColumns.length === 0 || addedColumns.length === 0) {
-    return result;
-  }
-
-  // Group by table for faster lookup
-  const removedByTable = groupColumnsByTable(removedColumns);
-  const addedByTable = groupColumnsByTable(addedColumns);
-
-  // Process tables that have both removals and additions
-  const tablesWithBoth = Object.keys(removedByTable).filter((table) => table in addedByTable);
-
-  for (const tableName of tablesWithBoth) {
-    const removed = removedByTable[tableName];
-    const added = addedByTable[tableName];
-    if (!removed || !added) continue;
-
-    // Track which columns have been matched to avoid double-matching
-    const matchedAdded = new Set<number>();
-    const matchedRemoved = new Set<number>();
-
-    // First pass: look for highly similar columns (strong matches)
-    for (const [i, removedCol] of removed.entries()) {
-      if (matchedRemoved.has(i)) continue;
-
-      for (const [j, addedCol] of added.entries()) {
-        if (matchedAdded.has(j)) continue;
-
-        if (columnsLookLikeRename(removedCol, addedCol, true)) {
-          result.push(createRenameOperation(removedCol, addedCol));
-          matchedRemoved.add(i);
-          matchedAdded.add(j);
-          break;
-        }
-      }
-    }
-
-    // Second pass: look for columns that are similar but might have some differences
-    for (const [i, removedCol] of removed.entries()) {
-      if (matchedRemoved.has(i)) continue;
-
-      for (const [j, addedCol] of added.entries()) {
-        if (matchedAdded.has(j)) continue;
-
-        if (columnsLookLikeRename(removedCol, addedCol, false)) {
-          result.push(createRenameOperation(removedCol, addedCol));
-          matchedRemoved.add(i);
-          matchedAdded.add(j);
-          break;
-        }
-      }
-    }
-  }
-
-  return result;
+/** The current and target columns of the renames, by getColName */
+function renamedColumnKeys(renames: DeclaredColumnRename[]): Set<string> {
+  return new Set(
+    renames.flatMap(({ current, target }) => [getColName(current), getColName(target)]),
+  );
 }
 
 function createRenameOperation(removed: Column, added: Column): RenameOperation<Column> {
@@ -841,15 +897,6 @@ function createRenameOperation(removed: Column, added: Column): RenameOperation<
     current: removed,
     target: added,
   };
-}
-
-function groupColumnsByTable(columns: Column[]): Record<string, Column[]> {
-  return columns.reduce<Record<string, Column[]>>((groups, column) => {
-    const group = groups[column.table] ?? [];
-    group.push(column);
-    groups[column.table] = group;
-    return groups;
-  }, {});
 }
 
 function getColumnAdds(

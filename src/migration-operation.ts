@@ -31,7 +31,15 @@ export type RecreateOperation = Operation<"recreate", Table> & {
   current: Table;
   target: Table;
   reasons?: RecreateReason[];
+  /**
+   * Columns renamed by the renameColumns option. The recreate copies each
+   * one's data from its current name to its new name; every other column is
+   * copied only to the column of the same name.
+   */
+  columnRenames?: ColumnRename[];
 };
+
+export type ColumnRename = { from: string; to: string };
 
 // How the virtual table is recreated (and whether its data survives) is up to
 // the module handler; see src/virtual-tables/types.ts.

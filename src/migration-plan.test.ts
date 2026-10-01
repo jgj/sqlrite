@@ -591,7 +591,42 @@ describe("createMigrationPlan", () => {
       expect(get(plan[0] ?? {}, "current.table")).toBe("users");
     });
 
-    it("should identify column renames", () => {
+    it("does not guess column renames", () => {
+      const diff = createEmptySchemaDiff();
+      const tableObj = {
+        type: "table" as const,
+        name: "users",
+        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, old_name TEXT)",
+        views: [],
+        num_cols: 3,
+      };
+      diff.current.tables.push(tableObj);
+
+      const removedColumn: Column = {
+        type: "column",
+        name: "old_name",
+        table: "users",
+        data_type: "TEXT",
+        ordinal_position: 2,
+        nullable: true,
+        character_maximum_length: null,
+        precision: null,
+        default: "",
+        check_constraint: null,
+        autoincrement: false,
+        generated: "none",
+      };
+      diff.column.removed = [removedColumn];
+      diff.column.added = [{ ...removedColumn, name: "new_name" }];
+
+      const plan = createMigrationPlan(diff);
+
+      expect(plan.map((op) => op.type)).toEqual(["drop", "create"]);
+      expect(plan[0]?.current?.name).toBe("old_name");
+      expect(plan[1]?.target?.name).toBe("new_name");
+    });
+
+    it("renames the columns the renameColumns option declares", () => {
       const diff = createEmptySchemaDiff();
       const tableObj = {
         type: "table" as const,
@@ -601,6 +636,10 @@ describe("createMigrationPlan", () => {
         num_cols: 3,
       };
       diff.current.tables.push(tableObj);
+      diff.desired.tables.push({
+        ...tableObj,
+        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, new_name TEXT, email TEXT)",
+      });
 
       // Define a removed column and an added column with similar properties
       const removedColumn = {
@@ -608,7 +647,7 @@ describe("createMigrationPlan", () => {
         name: "old_name",
         table: "users",
         data_type: "TEXT",
-        ordinal_position: 2,
+        ordinal_position: 1,
         nullable: true,
         character_maximum_length: null,
         precision: null,
@@ -626,8 +665,11 @@ describe("createMigrationPlan", () => {
       diff.column.removed = [removedColumn];
       diff.column.added = [addedColumn];
 
-      const plan = createMigrationPlan(diff);
+      const plan = createMigrationPlan(diff, {
+        renameColumns: { users: { old_name: "new_name" } },
+      });
 
+      // The column is in the middle of the table, but a rename keeps it in place
       expect(plan).toHaveLength(1);
       expect(plan[0]?.type).toBe("rename");
       expect(plan[0]?.current?.name).toBe("old_name");

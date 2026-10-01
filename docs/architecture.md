@@ -41,7 +41,7 @@ Determines the minimal set of operations needed. SQLite only supports four ALTER
 
 Everything else requires **table recreation**: create temp table → copy data → drop old → rename temp.
 
-The planner detects table renames (via SQL comparison minus name) and column renames (via heuristic matching of removed+added columns with compatible types).
+The planner detects table renames (via SQL comparison minus name). Column renames are never guessed: they come from the `renameColumns` option, and look-alike removed+added columns are only reported as `possible_rename` warnings.
 
 Each recreation decision is tagged with a `RecreateReason` (`{ check, detail }`) and surfaced on the corresponding `RecreateOperation.reasons`. This is the primary debugging hook when a recreation seems unexpected — each call site that adds a table to the recreate set records a check identifier (e.g. `column.order_changed`, `foreign_key.added`, `table.sql_diff`) and a detail string with before/after values, so callers can see exactly which rule fired and why.
 
@@ -50,7 +50,7 @@ Each recreation decision is tagged with a `RecreateReason` (`{ check, detail }`)
 Converts the migration plan into executable SQL statements. The table recreation flow follows SQLite's recommended procedure:
 
 1. `CREATE TABLE temp_{name} (...)` with the new schema
-2. `INSERT INTO temp_{name} SELECT ... FROM {name}` (common columns only)
+2. `INSERT INTO temp_{name} SELECT ... FROM {name}` (columns of the same name, and columns renamed by `renameColumns`)
 3. `DROP TABLE {name}`
 4. `ALTER TABLE temp_{name} RENAME TO {name}`
 

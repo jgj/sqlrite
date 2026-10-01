@@ -13,3 +13,5 @@ export const next = `
     name TEXT NOT NULL
   );
 `;
+
+export const options = { renameColumns: { users: { old_name: "name" } } };
