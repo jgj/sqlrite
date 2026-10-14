@@ -1,7 +1,7 @@
-import type { DatabaseSync } from "node:sqlite";
-import type { Client } from "@libsql/client";
-import type { Database } from "better-sqlite3";
 import {
+  type BetterSqlite3Database,
+  type LibsqlClient,
+  type NodeSqliteDatabase,
   type SQLite,
   getBetterSqlite3Database,
   getLibsqlClient,
@@ -20,7 +20,7 @@ export interface Driver {
 
 type DriverFactory<C extends SQLite> = (client: C) => Driver;
 
-const getLibsqlDriver: DriverFactory<Client> = (client: Client) => {
+const getLibsqlDriver: DriverFactory<LibsqlClient> = (client: LibsqlClient) => {
   const query = async <T>(sql: string) => {
     const result = await client.execute(sql);
     return result.rows as T[];
@@ -42,10 +42,11 @@ const getLibsqlDriver: DriverFactory<Client> = (client: Client) => {
   return { execute, query, migrate };
 };
 
-const getBetterSqlite3Driver: DriverFactory<Database> = (client: Database) => {
+const getBetterSqlite3Driver: DriverFactory<BetterSqlite3Database> = (
+  client: BetterSqlite3Database,
+) => {
   const query = async <T>(sql: string) => {
-    const result = await client.prepare<unknown[], T>(sql).all();
-    return result;
+    return client.prepare(sql).all() as T[];
   };
 
   const execute = async (sql: string) => {
@@ -76,7 +77,7 @@ const getBetterSqlite3Driver: DriverFactory<Database> = (client: Database) => {
   return { execute, query, migrate };
 };
 
-const getNodeSqliteDriver: DriverFactory<DatabaseSync> = (client: DatabaseSync) => {
+const getNodeSqliteDriver: DriverFactory<NodeSqliteDatabase> = (client: NodeSqliteDatabase) => {
   const query = async <T>(sql: string) => {
     return client.prepare(sql).all() as T[];
   };
@@ -160,13 +161,14 @@ function preservingLegacyAlterTable(driver: Driver): Driver {
  * `client`. `prepare` runs on the scratch client before the DDL, so extension
  * modules the DDL uses can be loaded first.
  */
-export const getNextDriver = async (
-  client: SQLite,
+export const getNextDriver = async <C extends SQLite>(
+  client: C,
   ddl: string,
-  prepare?: (client: SQLite) => void | Promise<void>,
+  prepare?: (client: C) => void | Promise<void>,
 ) => {
   const scratch = await getScratchClient(client, prepare !== undefined);
-  await prepare?.(scratch);
+  // The scratch client is of the same driver as `client`
+  await prepare?.(scratch as C);
   const driver = getDriver(scratch);
   await driver.execute(ddl);
   return driver;
