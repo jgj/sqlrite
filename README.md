@@ -1,38 +1,103 @@
 # sqlrite
 
-Declarative schema management for sqlite.
+Declarative schema management for SQLite.
 
-SQLRite compares your current database schema against a desired schema and generates the SQL statements needed to migrate between them. It uses SQLite itself to parse and validate schemas, ensuring compatibility.
+You write the schema you want as `CREATE` statements. sqlrite compares it with the schema of a
+live database and generates and runs the SQL that turns one into the other. There are no
+migration files and no migration history: the desired schema is the single source of truth.
+
+sqlrite builds your desired schema in a scratch in-memory database of the same driver, so SQLite
+itself parses and validates it, and both schemas are read back the same way before they are
+compared.
+
+## Install
+
+```sh
+pnpm add sqlrite
+```
+
+sqlrite needs Node.js 22 or later and one of the supported drivers:
+
+| Driver                                                              | Client type    | Install                   |
+| ------------------------------------------------------------------- | -------------- | ------------------------- |
+| [better-sqlite3](https://github.com/WiseLibs/better-sqlite3)        | `Database`     | `pnpm add better-sqlite3` |
+| [node:sqlite](https://nodejs.org/api/sqlite.html)                   | `DatabaseSync` | built in                  |
+| [@libsql/client](https://github.com/tursodatabase/libsql-client-ts) | `Client`       | `pnpm add @libsql/client` |
 
 ## Usage
 
 ```typescript
-import { migrate, getMigrationPlan } from 'sqlrite';
+import Database from "better-sqlite3";
+import { migrate } from "sqlrite";
 
 const schema = `
-CREATE TABLE users (
-  id INTEGER PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL
-);
+  CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX users_created_at ON users (created_at);
 `;
 
-// Automatically migrate
-await migrate(db, schema);
+const db = new Database("app.db");
+const result = await migrate(db, schema);
 
-// Or get migration plan without executing
-const plan = await getMigration(db, schema);
-console.log(plan);
-// ["CREATE TABLE users (...)", ...]
+if (!result.success) throw result.err;
+console.log(result.statements); // the SQL that was run
+console.log(result.warnings); // see "Warnings" below
 ```
 
-### Debugging unexpected migrations
+Running `migrate` again with the same schema runs nothing.
 
-If sqlrite produces a surprising migration (e.g. a full table recreation when you expected none), use `getMigrationPreview` to see *why*. Each `recreate` operation in the returned `plan` carries a `reasons` array recording which checks fired:
+sqlrite manages tables, columns, indexes, views, triggers and foreign keys, and virtual tables
+when you opt in (see `manageVirtualTables`). The schema string is your whole schema: an object in
+the database that it does not declare is dropped.
+
+## Look before you migrate
+
+`migrate` runs the statements it generates even when they lose data. To see them first, use
+`getMigrationPreview`, or `getMigration` for the statements alone:
 
 ```typescript
-import { getMigrationPreview } from 'sqlrite';
+import { getMigration, getMigrationPreview, migrate } from "sqlrite";
 
-const { statements, plan, diff } = await getMigrationPreview(db, schema);
+const statements = await getMigration(db, schema); // string[]
+
+const { warnings } = await getMigrationPreview(db, schema);
+if (warnings.some((w) => w.type === "destructive")) {
+  throw new Error(warnings.map((w) => w.message).join("\n"));
+}
+await migrate(db, schema);
+```
+
+### Warnings
+
+| `type`            | Meaning                                                                     |
+| ----------------- | --------------------------------------------------------------------------- |
+| `destructive`     | Data will be lost: a table or column is dropped, for instance.              |
+| `caution`         | Data is kept, but the change is heavy: a table is recreated, for instance.  |
+| `possible_rename` | A dropped and an added column of one table look alike. See `renameColumns`. |
+
+A `possible_rename` warning also has `table`, `from` and `to`.
+
+## Table recreation
+
+SQLite's `ALTER TABLE` can only rename a table, and add, drop or rename a column. sqlrite uses it
+for those changes. Any other change to a table (a column's type, nullability or default, a
+constraint, column order, ...) recreates the table, as
+[the SQLite documentation describes](https://www.sqlite.org/lang_altertable.html#otheralter): a
+new table is created, the rows are copied into it, the old table is dropped and the new one takes
+its name. Indexes, triggers and views on the table are created again.
+
+A recreate keeps the data of every column the desired table still has, but it rewrites the whole
+table, which takes time on a large one.
+
+### Why is this table recreated?
+
+Each recreate in the plan says which checks caused it:
+
+```typescript
+const { plan } = await getMigrationPreview(db, schema);
 
 for (const op of plan) {
   if (op.type === "recreate") {
@@ -44,53 +109,112 @@ for (const op of plan) {
 }
 ```
 
-Each reason has a `check` identifier (e.g. `column.modified.data_type`, `column.order_changed`, `foreign_key.added`, `table.sql_diff`) and a human-readable `detail` string with before/after values. The raw `SchemaDiff` is also exposed on `diff` for deeper inspection.
+`check` identifies the check (`column.modified.data_type`, `column.order_changed`,
+`foreign_key.added`, `table.sql_diff`, ...) and `detail` gives the values before and after. The
+raw schema comparison is on the preview's `diff`.
 
-### SQLite ALTER TABLE
+## Options
 
-1. Overview
+`migrate`, `getMigrationPreview` and `getMigration` take an options object as their third
+argument. Pass the same options to all of them.
 
-SQLite supports a limited subset of ALTER TABLE. The ALTER TABLE command in SQLite allows these alterations of an existing table: it can be renamed; a column can be renamed; a column can be added to it; or a column can be dropped from it.
+### `renameColumns`
 
-The only schema altering commands directly supported by SQLite are the "rename table", "rename column", "add column", "drop column" commands. However, applications can make other arbitrary changes to the format of a table using a simple sequence of operations. The steps to make arbitrary changes to the schema design of some table X are as follows:
+sqlrite never guesses column renames. A column the desired schema drops is dropped with its data,
+and a column it adds starts empty. To keep the data, declare the rename, by table and then by
+current column name:
 
-If foreign key constraints are enabled, disable them using PRAGMA foreign_keys=OFF.
+```typescript
+await migrate(db, schema, { renameColumns: { users: { username: "name" } } });
+```
 
-Start a transaction.
+A rename that has already been made is skipped, so you can keep passing the same option after
+the migration has run. Any other rename must be from a column the desired schema drops to a
+column it adds to the same table, or it throws.
 
-Remember the format of all indexes, triggers, and views associated with table X. This information will be needed in step 8 below. One way to do this is to run a query like the following: SELECT type, sql FROM sqlite_schema WHERE tbl_name='X'.
+Table renames need no option: a table that disappears while another with the same definition
+appears is renamed.
 
-Use CREATE TABLE to construct a new table "new_X" that is in the desired revised format of table X. Make sure that the name "new_X" does not collide with any existing table name, of course.
+### `ignoreTableDeletion`
 
-Transfer content from X into new_X using a statement like: INSERT INTO new_X SELECT ... FROM X.
+Tables missing from the desired schema are kept, with their indexes, triggers and views. Use it
+when some tables of the database are deliberately not in your schema.
 
-Drop the old table X: DROP TABLE X.
+### `ignoreColumnOrder`
 
-Change the name of new_X to X using: ALTER TABLE new_X RENAME TO X.
+A difference in column order alone does not recreate the table. Other changes to the table still
+do. Use it when a database's column order has drifted from your schema and you do not want to
+rewrite the table for that.
 
-Use CREATE INDEX, CREATE TRIGGER, and CREATE VIEW to reconstruct indexes, triggers, and views associated with table X. Perhaps use the old format of the triggers, indexes, and views saved from step 3 above as a guide, making changes as appropriate for the alteration.
+### `manageVirtualTables`
 
-If any views refer to table X in a way that is affected by the schema change, then drop those views using DROP VIEW and recreate them with whatever changes are necessary to accommodate the schema change using CREATE VIEW.
+When true, virtual tables (`CREATE VIRTUAL TABLE`) are created, dropped and recreated to match
+the desired schema. When false (the default), they are left exactly as they are.
 
-If foreign key constraints were originally enabled then run PRAGMA foreign_key_check to verify that the schema change did not break any foreign key constraints.
+FTS5 tables have a dedicated handler: equivalent spellings of the same definition are not
+changes, a rename uses `ALTER TABLE ... RENAME`, and a recreate keeps the rows of a table that
+stores its own content, or rebuilds an external-content index from its content table. Virtual
+tables of other modules are recreated with `DROP` and `CREATE`, which loses their data, and a
+`destructive` warning says so.
 
-Commit the transaction started in step 2.
+### `prepareNextDatabase`
 
-If foreign keys constraints were originally enabled, reenable them now.
+Called with the scratch database before the desired schema runs on it, so you can load the
+extensions it needs. Without them, `CREATE VIRTUAL TABLE` fails with "no such module". The
+scratch database has the type of the client you passed:
 
-Caution: Take care to follow the procedure above precisely. The boxes below summarize two procedures for modifying a table definition. At first glance, they both appear to accomplish the same thing. However, the procedure on the right does not always work, especially with the enhanced rename table capabilities added by versions 3.25.0 and 3.26.0. In the procedure on the right, the initial rename of the table to a temporary name might corrupt references to that table in triggers, views, and foreign key constraints. The safe procedure on the left constructs the revised table definition using a new temporary name, then renames the table into its final name, which does not break links.
+```typescript
+await migrate(db, schema, {
+  manageVirtualTables: true,
+  prepareNextDatabase: (scratch) => {
+    scratch.loadExtension("/path/to/vec0");
+  },
+});
+```
 
-Create new table
-Copy data
-Drop old table
-Rename new into old
-↑
-Correct
+Loading extensions on your own database is up to you. When you pass this hook, node:sqlite opens
+the scratch database with `allowExtension: true`. A libsql client has no API to load extensions.
 
+## Drizzle
 
-Rename old table
-Create new table
-Copy data
-Drop old table
-↑
-Incorrect
+If you define your schema with [Drizzle](https://orm.drizzle.team), `fromDrizzle` turns its
+tables into the `CREATE TABLE` and `CREATE INDEX` statements sqlrite takes:
+
+```typescript
+import { migrate } from "sqlrite";
+import { fromDrizzle } from "sqlrite/drizzle";
+import { posts, users } from "./schema";
+
+await migrate(db, fromDrizzle(users, posts));
+```
+
+It needs `drizzle-orm` 0.45.
+
+## Errors
+
+- A desired schema that SQLite rejects, or an invalid option, makes `migrate`,
+  `getMigrationPreview` and `getMigration` throw.
+- A migration whose statements fail is rolled back, and `migrate` returns `success: false` with
+  the error as `err`. When sqlrite can tell which statement failed, `err` is a `MigrationError`:
+
+```typescript
+import { MigrationError, migrate } from "sqlrite";
+
+const result = await migrate(db, schema);
+if (result.err instanceof MigrationError) {
+  console.error(result.err.statementIndex, result.err.statement, result.err.cause);
+}
+```
+
+- A migration that would change a temp table, view, index or trigger of the connection instead
+  of the object of the same name in the main schema is refused: `migrate` returns
+  `success: false`.
+
+## Before you use it on a database you care about
+
+Back it up. Preview the migration and read the warnings before you run it, at least until you
+trust what sqlrite does with your schema.
+
+## License
+
+[MIT](LICENSE)
