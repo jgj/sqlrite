@@ -54,8 +54,11 @@ export function isBetterSqlite3Database(sqlite: SQLite): sqlite is BetterSqlite3
 
 export async function getNodeSqliteDatabase(options?: DatabaseSyncOptions): Promise<DatabaseSync> {
   const { DatabaseSync } = await import("node:sqlite");
-  // DatabaseSync rejects an explicit undefined options argument
-  return options ? new DatabaseSync(":memory:", options) : new DatabaseSync(":memory:");
+  // Node 24.12+ turns SQLite's defensive flag on by default, which refuses
+  // tables named like a virtual table's shadow tables (docs_content next to
+  // an FTS4 docs) and writes to shadow tables. The scratch database has to
+  // accept any schema the live database can hold. Older Node ignores the option.
+  return new DatabaseSync(":memory:", { defensive: false, ...options });
 }
 
 export function isNodeSqliteDatabase(sqlite: SQLite): sqlite is NodeSqliteDatabase {
