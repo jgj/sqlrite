@@ -21,7 +21,6 @@ import {
   findViewsDependingOnTable,
   invariant,
   isLiteralDefault,
-  isTesting,
   foldName as lower,
   sqlIdentifier as sql,
 } from "./utils";
@@ -256,9 +255,10 @@ export function generateDDL(
           break;
       }
     } catch (error) {
-      !isTesting() && console.error("Error generating DDL for operation:", operation, error);
-      // Add the error as a comment in the SQL output for debugging
-      statements.push(`-- Error generating DDL: ${error}`);
+      // Leaving the operation out would migrate to a schema other than the
+      // desired one
+      const name = (operation.current ?? operation.target)?.name;
+      throw new Error(`Cannot generate DDL for ${operation.type} of "${name}"`, { cause: error });
     }
   }
 

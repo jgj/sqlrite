@@ -11,6 +11,7 @@ import {
   getNodeSqliteDatabase,
 } from "./sqlite";
 import { registerFactoryModule } from "./test-utils";
+import { MigrationError } from "./utils";
 
 describe("Driver module", () => {
   describe("getDriverType function", () => {
@@ -213,6 +214,55 @@ describe("Driver module", () => {
 
       expect(migrateResult.success).toBe(false);
       expect(migrateResult.err).toBeInstanceOf(Error);
+    });
+  });
+
+  describe.each([
+    ["libsql", getLibsqlClient],
+    ["better-sqlite3", getBetterSqlite3Database],
+    ["node:sqlite", getNodeSqliteDatabase],
+  ] as const)("%s migration failure", (_name, getClient) => {
+    let driver: ReturnType<typeof getDriver>;
+
+    beforeEach(async () => {
+      driver = getDriver(await getClient());
+      await driver.execute(
+        "CREATE TABLE kept (id INTEGER PRIMARY KEY); INSERT INTO kept VALUES (1);",
+      );
+    });
+
+    const statements = [
+      "CREATE TABLE a (id INTEGER PRIMARY KEY, v TEXT UNIQUE)",
+      "INSERT INTO a (v) VALUES ('x')",
+      "DELETE FROM kept",
+      "INSERT INTO a (v) VALUES ('y')",
+      "CREATE TABLE b (id INTEGER PRIMARY KEY)",
+    ];
+
+    it.each([
+      [0, "INVALID SQL STATEMENT"],
+      [2, "SELECT missing FROM a"],
+      // Fails only because of a row an earlier statement of the migration wrote
+      [4, "INSERT INTO a (v) VALUES ('x')"],
+      [5, "INVALID SQL STATEMENT"],
+    ])("names statement %i as the one that failed", async (index, failing) => {
+      const sql = [...statements.slice(0, index), failing, ...statements.slice(index)];
+      const res = await driver.migrate(sql);
+
+      expect(res.success).toBe(false);
+      expect(res.err).toBeInstanceOf(MigrationError);
+      const err = res.err as MigrationError;
+      expect(err.statementIndex).toBe(index);
+      expect(err.statement).toBe(failing);
+      expect(err.cause).toBeInstanceOf(Error);
+      expect(err.message).not.toMatch(/sqlrite_statement_probe/);
+
+      // Neither the migration nor anything run to find the statement committed
+      const tables = await driver.query<{ name: string }>(
+        "SELECT name FROM sqlite_schema WHERE type = 'table'",
+      );
+      expect(tables.map((t) => t.name)).toEqual(["kept"]);
+      expect(await driver.query("SELECT id FROM kept")).toEqual([{ id: 1 }]);
     });
   });
 

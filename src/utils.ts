@@ -207,10 +207,9 @@ class UnknownError extends Error {
 }
 
 /**
- * The `err` of a failed migration on better-sqlite3 or node:sqlite: names the
- * statement that failed, with the driver's error as `cause`. On libsql, `err`
- * is the driver's error itself, since its batch API does not say which
- * statement failed.
+ * The `err` of a failed migration: names the statement that failed, with the
+ * driver's error as `cause`. On libsql, a failure that cannot be traced to one
+ * statement (at COMMIT, say) is the driver's error itself.
  */
 export class MigrationError extends Error {
   readonly statementIndex: number;
@@ -250,8 +249,4 @@ export function invariant(thing: unknown, msg = "Invariant received falsy value"
   if (thing) return;
 
   throw new InvariantError(msg);
-}
-
-export function isTesting() {
-  return process.env.NODE_ENV === "test";
 }

@@ -10,7 +10,7 @@ import {
   isLibsqlClient,
   isNodeSqliteDatabase,
 } from "./sqlite";
-import { MigrationError, type Result, isTesting, result } from "./utils";
+import { MigrationError, type Result, result } from "./utils";
 
 export interface Driver {
   execute(sql: string): Promise<void>;
@@ -35,12 +35,50 @@ const getLibsqlDriver: DriverFactory<LibsqlClient> = (client: LibsqlClient) => {
       await client.migrate(sql);
       return result();
     } catch (err) {
-      !isTesting() && console.error(err);
-      return result(err);
+      if (!(err instanceof Error)) return result(err);
+      const index = await findFailingStatement(client, sql, err);
+      const stmt = index === undefined ? undefined : sql[index];
+      if (index === undefined || stmt === undefined) return result(err);
+      return result(new MigrationError(index, stmt, err));
     }
   };
   return { execute, query, migrate };
 };
+
+// Fails in any migration it ends, so a replay of a prefix always rolls back
+const PROBE = "SELECT sqlrite_statement_probe()";
+
+/**
+ * The index of the statement that failed `client.migrate(sql)` with `failure`.
+ * libsql's migrate does not say which statement failed, but it rolls back on
+ * any failure: prefixes of `sql` are replayed with PROBE appended, so none of
+ * them commits, and a binary search finds the shortest prefix that fails as
+ * the migration did. Undefined when no statement is found to fail that way
+ * (the failure was at COMMIT, or a replay failed differently).
+ */
+async function findFailingStatement(
+  client: LibsqlClient,
+  sql: string[],
+  failure: Error,
+): Promise<number | undefined> {
+  // Prefixes of length `good` are known to run; of length `bad`, to fail.
+  // sql.length + 1 stands for the whole migration with its COMMIT.
+  let good = 0;
+  let bad = sql.length + 1;
+  while (bad - good > 1) {
+    const length = Math.floor((good + bad) / 2);
+    try {
+      await client.migrate([...sql.slice(0, length), PROBE]);
+      return undefined; // PROBE cannot succeed: the replay is not a faithful one
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("sqlrite_statement_probe")) good = length;
+      else if (message === failure.message) bad = length;
+      else return undefined;
+    }
+  }
+  return bad <= sql.length ? bad - 1 : undefined;
+}
 
 const getBetterSqlite3Driver: DriverFactory<BetterSqlite3Database> = (
   client: BetterSqlite3Database,
@@ -70,7 +108,6 @@ const getBetterSqlite3Driver: DriverFactory<BetterSqlite3Database> = (
         .deferred(sql);
       return result();
     } catch (err) {
-      !isTesting() && console.error(err);
       return result(err);
     }
   };
@@ -106,7 +143,6 @@ const getNodeSqliteDriver: DriverFactory<NodeSqliteDatabase> = (client: NodeSqli
       } catch {
         // ignore rollback errors
       }
-      !isTesting() && console.error(err);
       return result(err);
     }
   };

@@ -1169,14 +1169,19 @@ describe("generateDDL", () => {
       expect(ddl).toEqual(["-- rebuild x(a)"]);
     });
 
-    it("reports an error for a rebuild of a module that cannot rebuild", () => {
-      const ddl = generateDDL(
-        [{ type: "rebuild", target: rt, reasons: [] }],
-        createEmptyIntrospection(),
-        createEmptyIntrospection(),
+    it("throws for a rebuild of a module that cannot rebuild", () => {
+      const generate = () =>
+        generateDDL(
+          [{ type: "rebuild", target: rt, reasons: [] }],
+          createEmptyIntrospection(),
+          createEmptyIntrospection(),
+        );
+      expect(generate).toThrow(`Cannot generate DDL for rebuild of "${rt.name}"`);
+      expect(() => generate()).toThrow(
+        expect.objectContaining({
+          cause: expect.objectContaining({ message: expect.stringMatching(/cannot rebuild/) }),
+        }),
       );
-      expect(ddl).toHaveLength(1);
-      expect(ddl[0]).toMatch(/^-- Error generating DDL: .*cannot rebuild/);
     });
 
     it("uses the handler's create when it has one", () => {
