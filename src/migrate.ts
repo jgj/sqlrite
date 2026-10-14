@@ -16,7 +16,11 @@ import { result } from "./utils";
  *            the desired database schema
  * @param options Migration options that influence which differences produce statements
  */
-export async function migrate(client: SQLite, ddl: string, options: MigrationOptions = {}) {
+export async function migrate<C extends SQLite>(
+  client: C,
+  ddl: string,
+  options: MigrationOptions<C> = {},
+) {
   const { statements, warnings, plan } = await getMigrationPreview(client, ddl, options);
   const driver = getDriver(client);
   // The statements would change a temp object instead of the main one it

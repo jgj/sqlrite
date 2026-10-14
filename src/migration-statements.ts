@@ -40,7 +40,7 @@ export type MigrationWarning =
       to: string;
     };
 
-export type MigrationOptions = {
+export type MigrationOptions<C extends SQLite = SQLite> = {
   /**
    * Columns to rename, by table and then by current column name:
    * `{ users: { username: "name" } }`. A rename keeps the column's data under
@@ -132,7 +132,8 @@ export type MigrationOptions = {
    * modules the DDL needs (sqlite-vec, spatialite, ...); without them
    * CREATE VIRTUAL TABLE fails with "no such module".
    *
-   * The client is of the same kind as the one passed to sqlrite:
+   * The client is of the same kind, and has the same type, as the one passed
+   * to sqlrite:
    * - better-sqlite3: call `db.loadExtension(path)`.
    * - node:sqlite: call `db.loadExtension(path)`; the scratch database is
    *   opened with `allowExtension: true`.
@@ -144,7 +145,7 @@ export type MigrationOptions = {
    * use the JavaScript API. This hook only affects the scratch database;
    * loading extensions on the live client is the caller's job.
    */
-  prepareNextDatabase?: (client: SQLite) => void | Promise<void>;
+  prepareNextDatabase?(client: C): void | Promise<void>;
 };
 
 export type MigrationPreview = {
@@ -154,19 +155,19 @@ export type MigrationPreview = {
   diff: SchemaDiff;
 };
 
-export async function getMigrationStatements(
-  client: SQLite,
+export async function getMigrationStatements<C extends SQLite>(
+  client: C,
   ddl: string,
-  options: MigrationOptions = {},
+  options: MigrationOptions<C> = {},
 ): Promise<string[]> {
   const preview = await getMigrationPreview(client, ddl, options);
   return preview.statements;
 }
 
-export async function getMigrationPreview(
-  client: SQLite,
+export async function getMigrationPreview<C extends SQLite>(
+  client: C,
   ddl: string,
-  options: MigrationOptions = {},
+  options: MigrationOptions<C> = {},
 ): Promise<MigrationPreview> {
   const currDriver = getDriver(client);
   const liveSchema = await introspect(currDriver);
