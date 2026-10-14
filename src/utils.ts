@@ -206,6 +206,12 @@ class UnknownError extends Error {
   }
 }
 
+/**
+ * The `err` of a failed migration on better-sqlite3 or node:sqlite: names the
+ * statement that failed, with the driver's error as `cause`. On libsql, `err`
+ * is the driver's error itself, since its batch API does not say which
+ * statement failed.
+ */
 export class MigrationError extends Error {
   readonly statementIndex: number;
   readonly statement: string;

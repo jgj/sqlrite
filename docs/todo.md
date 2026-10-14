@@ -20,7 +20,7 @@
 - [x] Multi-column foreign key introspection (group `pragma_foreign_key_list` by id)
 - [x] Use `pragma_table_xinfo` for generated column detection
 - [x] Foreign key safety: verified PRAGMA foreign_keys handling across all 3 drivers
-- [x] Dry-run mode (`dryRun` export)
+- [x] Dry-run mode (`getMigration` export)
 - [x] Better error messages with MigrationError context (statement index + SQL)
 
 ### Low Priority
