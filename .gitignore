@@ -5,3 +5,4 @@ CLAUDE*
 
 .claude/commands
 **/.claude/settings.local.json
+dist

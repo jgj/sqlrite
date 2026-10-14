@@ -2,16 +2,52 @@
   "name": "sqlrite",
   "version": "0.4.0",
   "description": "declaratively manage sqlite database schema",
+  "keywords": [
+    "sqlite",
+    "schema",
+    "migration",
+    "migrate",
+    "declarative",
+    "ddl",
+    "drizzle",
+    "libsql",
+    "better-sqlite3",
+    "node:sqlite"
+  ],
+  "license": "MIT",
+  "author": "Jason Jones",
+  "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./drizzle": "./src/drizzle.ts"
   },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "./drizzle": {
+        "types": "./dist/drizzle.d.mts",
+        "default": "./dist/drizzle.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "types": "./dist/index.d.mts"
+  },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
+    "build": "tsdown",
     "check": "biome check --fix --unsafe",
     "check:run": "biome check",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run check:run && pnpm run typecheck && pnpm run test && pnpm run build"
   },
   "dependencies": {
     "arktype": "2.1.16"
@@ -23,13 +59,14 @@
     "better-sqlite3": "^12.9.0",
     "drizzle-orm": "^0.45.1",
     "glob": "^11.0.1",
+    "tsdown": "^0.23.1",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
     "vitest": "^3.1.1"
   },
   "peerDependencies": {
     "@libsql/client": "^0.15.2",
-    "better-sqlite3": "^11.9.1",
+    "better-sqlite3": "^11.9.1 || ^12.0.0",
     "drizzle-orm": "^0.45.0"
   },
   "peerDependenciesMeta": {
