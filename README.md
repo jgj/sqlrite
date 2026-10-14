@@ -215,6 +215,10 @@ if (result.err instanceof MigrationError) {
 Back it up. Preview the migration and read the warnings before you run it, at least until you
 trust what sqlrite does with your schema.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 [MIT](LICENSE)
