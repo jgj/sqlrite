@@ -13,7 +13,7 @@ compared.
 ## Install
 
 ```sh
-pnpm add sqlrite
+pnpm add @jdctech/sqlrite
 ```
 
 sqlrite needs Node.js 22 or later and one of the supported drivers:
@@ -28,7 +28,7 @@ sqlrite needs Node.js 22 or later and one of the supported drivers:
 
 ```typescript
 import Database from "better-sqlite3";
-import { migrate } from "sqlrite";
+import { migrate } from "@jdctech/sqlrite";
 
 const schema = `
   CREATE TABLE users (
@@ -59,7 +59,7 @@ the database that it does not declare is dropped.
 `getMigrationPreview`, or `getMigration` for the statements alone:
 
 ```typescript
-import { getMigration, getMigrationPreview, migrate } from "sqlrite";
+import { getMigration, getMigrationPreview, migrate } from "@jdctech/sqlrite";
 
 const statements = await getMigration(db, schema); // string[]
 
@@ -181,8 +181,8 @@ If you define your schema with [Drizzle](https://orm.drizzle.team), `fromDrizzle
 tables into the `CREATE TABLE` and `CREATE INDEX` statements sqlrite takes:
 
 ```typescript
-import { migrate } from "sqlrite";
-import { fromDrizzle } from "sqlrite/drizzle";
+import { migrate } from "@jdctech/sqlrite";
+import { fromDrizzle } from "@jdctech/sqlrite/drizzle";
 import { posts, users } from "./schema";
 
 await migrate(db, fromDrizzle(users, posts));
@@ -198,7 +198,7 @@ It needs `drizzle-orm` 0.45.
   the error as `err`. When sqlrite can tell which statement failed, `err` is a `MigrationError`:
 
 ```typescript
-import { MigrationError, migrate } from "sqlrite";
+import { MigrationError, migrate } from "@jdctech/sqlrite";
 
 const result = await migrate(db, schema);
 if (result.err instanceof MigrationError) {

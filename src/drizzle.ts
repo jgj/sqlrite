@@ -27,8 +27,8 @@ export type DrizzleSQLiteTable = {
  * @example
  * ```typescript
  * import { users, posts } from "./schema";
- * import { fromDrizzle } from "sqlrite/drizzle";
- * import { migrate } from "sqlrite";
+ * import { fromDrizzle } from "@jdctech/sqlrite/drizzle";
+ * import { migrate } from "@jdctech/sqlrite";
  *
  * const ddl = fromDrizzle(users, posts);
  * await migrate(db, ddl);

@@ -36,7 +36,7 @@ Before you send a change, `pnpm run check`, `pnpm run typecheck` and `pnpm run t
 | `src/migration-statements.ts`           | Preview: runs the steps above, and makes the warnings              |
 | `src/migrate.ts`, `src/driver.ts`       | Runs the statements on each driver                                 |
 | `src/virtual-tables/`                   | Virtual table handlers (FTS5, and a default)                       |
-| `src/drizzle.ts`                        | `sqlrite/drizzle`: DDL from Drizzle tables                         |
+| `src/drizzle.ts`                        | `@jdctech/sqlrite/drizzle`: DDL from Drizzle tables                |
 | `docs/`                                 | Architecture and the SQLite edge cases handled                     |
 
 ## Tests
