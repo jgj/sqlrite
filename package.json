@@ -16,6 +16,14 @@
   ],
   "license": "MIT",
   "author": "Jason Jones",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jgj/sqlrite.git"
+  },
+  "homepage": "https://github.com/jgj/sqlrite#readme",
+  "bugs": {
+    "url": "https://github.com/jgj/sqlrite/issues"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
